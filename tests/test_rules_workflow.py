@@ -74,6 +74,32 @@ def test_write_all_permissions_high_on_dangerous_trigger():
     assert findings[0].severity == Severity.HIGH  # pull_request_target escalates
 
 
+def test_scoped_per_job_writes_not_flagged():
+    """Least-privilege per-job grants on safe triggers (pallets publish.yaml
+    pattern: contents:write for release, id-token:write for OIDC) are clean."""
+    assert run_rule(WritePermissionsRule(), make_ctx(["publish_scoped.yml"])) == []
+
+
+def test_single_job_toplevel_write_not_flagged():
+    """Top-level scoped writes in a one-job workflow are effectively per-job
+    (pallets lock.yaml pattern) and are not flagged."""
+    assert run_rule(WritePermissionsRule(), make_ctx(["lock_single_job.yml"])) == []
+
+
+def test_toplevel_write_multijob_flagged():
+    findings = run_rule(WritePermissionsRule(), make_ctx(["toplevel_write_multijob.yml"]))
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.MEDIUM
+    assert "inherited" in findings[0].title
+
+
+def test_scoped_write_on_dangerous_trigger_still_high():
+    findings = run_rule(WritePermissionsRule(), make_ctx(["pr_target_scoped_write.yml"]))
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.HIGH
+    assert "label" in findings[0].title  # the job-level grant is what's flagged
+
+
 def test_missing_permissions_block():
     findings = run_rule(MissingPermissionsBlockRule(), make_ctx(["pwn_request_vuln.yml"]))
     assert len(findings) == 1

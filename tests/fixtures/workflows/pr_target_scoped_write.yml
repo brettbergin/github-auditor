@@ -1,0 +1,16 @@
+# Even a narrowly-scoped per-job write grant is dangerous when paired with
+# pull_request_target. GHA006 should flag this as high.
+name: Auto label
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@8558fd74291d67161a8a78ce36a881fa63b766a9

@@ -1,0 +1,21 @@
+# Top-level write scope inherited by multiple jobs, most of which don't need
+# it. GHA006 should flag this as medium.
+name: Build and deploy
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make test
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make deploy

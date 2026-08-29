@@ -224,36 +224,69 @@ class WritePermissionsRule(Rule):
     name = "broad-write-permissions"
     default_severity = Severity.MEDIUM
     description = (
-        "The workflow grants write-level GITHUB_TOKEN permissions. Combined with a dangerous "
-        "trigger, any code execution in the workflow can push commits, tamper with releases, "
-        "or approve pull requests."
+        "The workflow grants GITHUB_TOKEN write access more broadly than the jobs that need "
+        "it: write-all, a top-level write scope inherited by every job, or any write grant on "
+        "a workflow that runs with a dangerous trigger, where untrusted input plus a write "
+        "token is how releases get tampered with and PRs self-approved. Write scopes "
+        "granted per job under safe triggers are least-privilege done right and are not "
+        "flagged."
     )
     remediation = (
-        "Set a top-level `permissions: contents: read` and grant write scopes per job only "
-        "where needed."
+        "Set a top-level `permissions: contents: read` and grant write scopes inside the "
+        "specific jobs that need them; never combine write grants with pull_request_target, "
+        "workflow_run, or issue_comment triggers."
     )
 
     def check(self, ctx: RepoContext) -> Iterator[Finding]:
         for wf in ctx.workflows:
-            dangerous = any(t in wf.triggers for t in DANGEROUS_TRIGGERS)
-            severity = Severity.HIGH if dangerous else Severity.MEDIUM
-            if is_write_permissions(wf.permissions):
-                yield self.finding(
-                    ctx,
-                    title="Workflow grants write-level token permissions",
-                    severity=severity,
-                    location=_loc(wf),
-                    evidence=f"permissions: {wf.permissions}",
-                )
-                continue  # job-level grants are subsumed by a top-level write
-            for job in wf.jobs:
-                if is_write_permissions(job.permissions):
+            if any(t in wf.triggers for t in DANGEROUS_TRIGGERS):
+                # Untrusted-input-adjacent: any write grant (id-token included —
+                # it mints cloud OIDC credentials) is a serious finding.
+                if is_write_permissions(wf.permissions):
                     yield self.finding(
                         ctx,
-                        title=f"Job '{job.id}' grants write-level token permissions",
-                        severity=severity,
+                        title="Write token permissions on a dangerous trigger",
+                        severity=Severity.HIGH,
+                        location=_loc(wf),
+                        evidence=f"permissions: {wf.permissions}",
+                    )
+                    continue  # job-level grants are subsumed by a top-level write
+                for job in wf.jobs:
+                    if is_write_permissions(job.permissions):
+                        yield self.finding(
+                            ctx,
+                            title=f"Job '{job.id}' has write permissions on a dangerous trigger",
+                            severity=Severity.HIGH,
+                            location=_loc(wf, job),
+                            evidence=f"permissions: {job.permissions}",
+                        )
+                continue
+
+            # Safe triggers: only overly-broad grants are findings.
+            if wf.permissions == "write-all":
+                yield self.finding(
+                    ctx,
+                    title="Workflow grants write-all token permissions",
+                    location=_loc(wf),
+                    evidence="permissions: write-all",
+                )
+                continue
+            if is_write_permissions(wf.permissions) and len(wf.jobs) > 1:
+                # With one job, top-level scoped writes are effectively per-job.
+                yield self.finding(
+                    ctx,
+                    title="Top-level write permissions inherited by every job",
+                    location=_loc(wf),
+                    evidence=f"permissions: {wf.permissions} ({len(wf.jobs)} jobs inherit this)",
+                )
+                continue
+            for job in wf.jobs:
+                if job.permissions == "write-all":
+                    yield self.finding(
+                        ctx,
+                        title=f"Job '{job.id}' grants write-all token permissions",
                         location=_loc(wf, job),
-                        evidence=f"permissions: {job.permissions}",
+                        evidence="permissions: write-all",
                     )
 
 
