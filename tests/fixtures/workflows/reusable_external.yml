@@ -1,0 +1,14 @@
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    uses: some-other-org/workflows/.github/workflows/deploy.yml@main
+    secrets: inherit
+  internal:
+    uses: testorg/workflows/.github/workflows/lint.yml@0123456789abcdef0123456789abcdef01234567
