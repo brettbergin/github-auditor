@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
-from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
@@ -45,8 +44,8 @@ class ParsedStep(BaseModel):
     name: str | None = None
     uses: str | None = None
     run: str | None = None
-    with_: dict[str, Any] = Field(default_factory=dict)
-    env: dict[str, Any] = Field(default_factory=dict)
+    with_: dict[str, object] = Field(default_factory=dict)
+    env: dict[str, object] = Field(default_factory=dict)
 
     @property
     def label(self) -> str:
@@ -56,7 +55,7 @@ class ParsedStep(BaseModel):
 class ParsedJob(BaseModel):
     id: str
     runs_on: list[str] = Field(default_factory=list)
-    permissions: dict[str, Any] | str | None = None
+    permissions: dict[str, object] | str | None = None
     uses: str | None = None  # reusable workflow call
     environment: str | None = None
     if_expr: str | None = None
@@ -66,16 +65,16 @@ class ParsedJob(BaseModel):
 class ParsedWorkflow(BaseModel):
     path: str
     name: str | None = None
-    triggers: dict[str, Any] = Field(default_factory=dict)
-    permissions: dict[str, Any] | str | None = None
+    triggers: dict[str, object] = Field(default_factory=dict)
+    permissions: dict[str, object] | str | None = None
     jobs: list[ParsedJob] = Field(default_factory=list)
-    raw: dict[str, Any] = Field(default_factory=dict)
+    raw: dict[str, object] = Field(default_factory=dict)
 
     def has_trigger(self, *names: str) -> bool:
         return any(n in self.triggers for n in names)
 
 
-def _normalize_triggers(value: Any) -> dict[str, Any]:
+def _normalize_triggers(value: object) -> dict[str, object]:
     if value is None:
         return {}
     if isinstance(value, str):
@@ -87,11 +86,21 @@ def _normalize_triggers(value: Any) -> dict[str, Any]:
     return {}
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+def _as_dict(value: object) -> dict[str, object]:
+    return {str(k): v for k, v in value.items()} if isinstance(value, dict) else {}
 
 
-def _normalize_runs_on(value: Any) -> list[str]:
+def _as_opt_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _as_permissions(value: object) -> dict[str, object] | str | None:
+    if isinstance(value, str | dict):
+        return value if isinstance(value, str) else _as_dict(value)
+    return None
+
+
+def _normalize_runs_on(value: object) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
@@ -109,15 +118,18 @@ def _normalize_runs_on(value: Any) -> list[str]:
 
 def parse_workflow(content: str, path: str) -> ParsedWorkflow | None:
     """Parse workflow YAML. Returns None when the file is not valid workflow YAML."""
+    loaded: object
     try:
-        doc = yaml.safe_load(content)
+        loaded = yaml.safe_load(content)
     except yaml.YAMLError:
         return None
-    if not isinstance(doc, dict):
+    if not isinstance(loaded, dict):
         return None
 
-    # YAML 1.1 parses the bare key `on:` as boolean True.
-    triggers_raw = doc.get("on", doc.get(True))
+    # YAML 1.1 parses the bare key `on:` as boolean True, so look it up before
+    # keys are normalized to strings.
+    triggers_raw: object = loaded.get("on", loaded.get(True))
+    doc = _as_dict(loaded)
 
     jobs: list[ParsedJob] = []
     for job_id, job_raw in _as_dict(doc.get("jobs")).items():
@@ -131,22 +143,23 @@ def parse_workflow(content: str, path: str) -> ParsedWorkflow | None:
                 steps.append(
                     ParsedStep(
                         index=i,
-                        name=step_dict.get("name"),
-                        uses=step_dict.get("uses"),
+                        name=_as_opt_str(step_dict.get("name")),
+                        uses=_as_opt_str(step_dict.get("uses")),
                         run=str(run_val) if run_val is not None else None,
                         with_=_as_dict(step_dict.get("with")),
                         env=_as_dict(step_dict.get("env")),
                     )
                 )
+        environment = job_dict.get("environment")
+        if not isinstance(environment, str):
+            environment = _as_opt_str(_as_dict(environment).get("name"))
         jobs.append(
             ParsedJob(
                 id=str(job_id),
                 runs_on=_normalize_runs_on(job_dict.get("runs-on")),
-                permissions=job_dict.get("permissions"),
-                uses=job_dict.get("uses"),
-                environment=job_dict.get("environment")
-                if isinstance(job_dict.get("environment"), str)
-                else _as_dict(job_dict.get("environment")).get("name"),
+                permissions=_as_permissions(job_dict.get("permissions")),
+                uses=_as_opt_str(job_dict.get("uses")),
+                environment=environment,
                 if_expr=str(job_dict["if"]) if "if" in job_dict else None,
                 steps=steps,
             )
@@ -154,11 +167,11 @@ def parse_workflow(content: str, path: str) -> ParsedWorkflow | None:
 
     return ParsedWorkflow(
         path=path,
-        name=doc.get("name") if isinstance(doc.get("name"), str) else None,
+        name=_as_opt_str(doc.get("name")),
         triggers=_normalize_triggers(triggers_raw),
-        permissions=doc.get("permissions"),
+        permissions=_as_permissions(doc.get("permissions")),
         jobs=jobs,
-        raw={str(k): v for k, v in doc.items()},
+        raw=doc,
     )
 
 
@@ -209,7 +222,7 @@ def is_local_or_trusted(uses: str, org: str, trusted_owners: list[str]) -> bool:
     return owner.lower() in trusted
 
 
-def is_write_permissions(permissions: dict[str, Any] | str | None) -> bool:
+def is_write_permissions(permissions: dict[str, object] | str | None) -> bool:
     """True when a permissions value grants any write access."""
     if permissions is None:
         return False

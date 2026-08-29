@@ -108,9 +108,7 @@ def render_repo_detail(rr: RepoRiskReport, console: Console) -> None:
     for f in sorted(rr.findings, key=lambda f: -f.severity.rank):
         by_rule.setdefault(f"{f.rule_id} {f.rule_name}", []).append(f)
     for rule_label, findings in by_rule.items():
-        branch = tree.add(
-            Text.assemble(severity_text(findings[0].severity), f"  {rule_label}")
-        )
+        branch = tree.add(Text.assemble(severity_text(findings[0].severity), f"  {rule_label}"))
         for f in findings:
             node = branch.add(f.title)
             if f.location:

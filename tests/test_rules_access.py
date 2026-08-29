@@ -45,35 +45,59 @@ def test_outside_collaborator_write():
 
 
 def test_secret_scanning_tristate():
-    assert len(run_rule(SecretScanningDisabledRule(),
-                        make_ctx(repo=make_repo(secret_scanning=False)))) == 1
-    assert run_rule(SecretScanningDisabledRule(),
-                    make_ctx(repo=make_repo(secret_scanning=True))) == []
-    assert run_rule(SecretScanningDisabledRule(),
-                    make_ctx(repo=make_repo(secret_scanning=None))) == []
+    assert (
+        len(run_rule(SecretScanningDisabledRule(), make_ctx(repo=make_repo(secret_scanning=False))))
+        == 1
+    )
+    assert (
+        run_rule(SecretScanningDisabledRule(), make_ctx(repo=make_repo(secret_scanning=True))) == []
+    )
+    assert (
+        run_rule(SecretScanningDisabledRule(), make_ctx(repo=make_repo(secret_scanning=None))) == []
+    )
     # Private repo: rule doesn't apply.
-    assert run_rule(SecretScanningDisabledRule(),
-                    make_ctx(repo=make_repo(visibility="private", secret_scanning=False))) == []
+    assert (
+        run_rule(
+            SecretScanningDisabledRule(),
+            make_ctx(repo=make_repo(visibility="private", secret_scanning=False)),
+        )
+        == []
+    )
 
 
 def test_push_protection():
-    assert len(run_rule(PushProtectionDisabledRule(),
-                        make_ctx(repo=make_repo(push_protection=False)))) == 1
-    assert run_rule(PushProtectionDisabledRule(),
-                    make_ctx(repo=make_repo(push_protection=None))) == []
+    assert (
+        len(run_rule(PushProtectionDisabledRule(), make_ctx(repo=make_repo(push_protection=False))))
+        == 1
+    )
+    assert (
+        run_rule(PushProtectionDisabledRule(), make_ctx(repo=make_repo(push_protection=None))) == []
+    )
 
 
 def test_dependabot():
-    assert len(run_rule(DependabotDisabledRule(),
-                        make_ctx(repo=make_repo(dependabot_alerts=False)))) == 1
-    assert run_rule(DependabotDisabledRule(),
-                    make_ctx(repo=make_repo(archived=True, dependabot_alerts=False))) == []
+    assert (
+        len(run_rule(DependabotDisabledRule(), make_ctx(repo=make_repo(dependabot_alerts=False))))
+        == 1
+    )
+    assert (
+        run_rule(
+            DependabotDisabledRule(),
+            make_ctx(repo=make_repo(archived=True, dependabot_alerts=False)),
+        )
+        == []
+    )
 
 
 def test_actions_can_approve_prs():
-    findings = run_rule(ForkPrApprovalRule(),
-                        make_ctx(repo=make_repo(can_approve_pull_request_reviews=True)))
+    findings = run_rule(
+        ForkPrApprovalRule(), make_ctx(repo=make_repo(can_approve_pull_request_reviews=True))
+    )
     assert len(findings) == 1
     assert findings[0].severity == Severity.HIGH
-    assert run_rule(ForkPrApprovalRule(),
-                    make_ctx(repo=make_repo(can_approve_pull_request_reviews=None))) == []
+    assert (
+        run_rule(
+            ForkPrApprovalRule(), make_ctx(repo=make_repo(can_approve_pull_request_reviews=None))
+        )
+        == []
+    )

@@ -50,14 +50,21 @@ def test_analyze_repo_runs_all_rules():
 def test_analyze_org_from_cache(store):
     repo = make_repo(id=1)
     store.upsert_repo(repo)
-    store.upsert_workflows(1, [
-        WorkflowInfo(repo_full_name=repo.full_name,
-                     path=".github/workflows/pwn.yml",
-                     content=load_fixture("pwn_request_vuln.yml")),
-        WorkflowInfo(repo_full_name=repo.full_name,
-                     path=".github/workflows/broken.yml",
-                     content="{{not yaml"),
-    ])
+    store.upsert_workflows(
+        1,
+        [
+            WorkflowInfo(
+                repo_full_name=repo.full_name,
+                path=".github/workflows/pwn.yml",
+                content=load_fixture("pwn_request_vuln.yml"),
+            ),
+            WorkflowInfo(
+                repo_full_name=repo.full_name,
+                path=".github/workflows/broken.yml",
+                content="{{not yaml",
+            ),
+        ],
+    )
     engine = RuleEngine()
     report = engine.analyze_org(store, "testorg")
     assert len(report.repos) == 1

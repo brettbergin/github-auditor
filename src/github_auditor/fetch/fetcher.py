@@ -7,11 +7,13 @@ endpoint goes through ``GitHubClient.optional`` so limited tokens degrade to
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import timedelta
 
+from github.GitBlob import GitBlob
 from github.NamedUser import NamedUser
 from github.Organization import Organization
 from github.Repository import Repository
@@ -71,12 +73,13 @@ class OrgFetcher:
             name=target.name,
             is_user=is_user,
         )
-        if not is_user:
+        if isinstance(target, Organization):
+            org_target = target
             info.two_factor_requirement_enabled = self.client.optional(
-                lambda: target.two_factor_requirement_enabled
+                lambda: org_target.two_factor_requirement_enabled
             )
             info.default_repository_permission = self.client.optional(
-                lambda: target.default_repository_permission
+                lambda: org_target.default_repository_permission
             )
         self.store.upsert_org(info)
         return info
@@ -111,14 +114,16 @@ class OrgFetcher:
 
         perms = client.get_actions_permissions(repo)
         if perms is not None:
-            info.actions_enabled = perms.get("enabled")
-            info.actions_allowed_actions = perms.get("allowed_actions")
+            info.actions_enabled = _opt_bool(perms.get("enabled"))
+            info.actions_allowed_actions = _opt_str(perms.get("allowed_actions"))
 
         wf_perms = client.get_workflow_permissions(repo)
         if wf_perms is not None:
-            info.default_workflow_permissions = wf_perms.get("default_workflow_permissions")
-            info.can_approve_pull_request_reviews = wf_perms.get(
-                "can_approve_pull_request_reviews"
+            info.default_workflow_permissions = _opt_str(
+                wf_perms.get("default_workflow_permissions")
+            )
+            info.can_approve_pull_request_reviews = _opt_bool(
+                wf_perms.get("can_approve_pull_request_reviews")
             )
 
         info.branch_protection = self._fetch_branch_protection(repo, info.default_branch)
@@ -127,7 +132,9 @@ class OrgFetcher:
         if keys is not None:
             info.deploy_keys = [
                 DeployKeyInfo(
-                    id=k.id, title=k.title or "", read_only=bool(k.read_only),
+                    id=k.id,
+                    title=k.title or "",
+                    read_only=bool(k.read_only),
                     created_at=k.created_at,
                 )
                 for k in keys
@@ -154,7 +161,7 @@ class OrgFetcher:
         return info
 
     @staticmethod
-    def _permission_of(collaborator) -> str:
+    def _permission_of(collaborator: NamedUser) -> str:
         perms = collaborator.permissions
         if perms is None:
             return "pull"
@@ -185,9 +192,7 @@ class OrgFetcher:
             reviews = protection.required_pull_request_reviews
             return BranchProtectionInfo(
                 exists=True,
-                required_reviews=(
-                    reviews.required_approving_review_count if reviews else 0
-                ),
+                required_reviews=(reviews.required_approving_review_count if reviews else 0),
                 required_status_checks=protection.required_status_checks is not None,
                 enforce_admins=bool(protection.enforce_admins),
                 allow_force_pushes=bool(getattr(protection, "allow_force_pushes", False)),
@@ -215,10 +220,13 @@ class OrgFetcher:
             try:
                 content = entry.decoded_content.decode("utf-8", errors="replace")
             except Exception:  # noqa: BLE001 - content may exceed API size limits
-                blob = client.optional(lambda e=entry: repo.get_git_blob(e.sha))
-                if blob is not None and blob.encoding == "base64":
-                    import base64
+                sha = entry.sha
 
+                def fetch_blob(blob_sha: str = sha) -> GitBlob:
+                    return repo.get_git_blob(blob_sha)
+
+                blob = client.optional(fetch_blob)
+                if blob is not None and blob.encoding == "base64":
                     content = base64.b64decode(blob.content).decode("utf-8", errors="replace")
             workflows.append(
                 WorkflowInfo(
@@ -279,9 +287,7 @@ class OrgFetcher:
         result.from_cache = len(repos) - len(to_fetch)
 
         with ThreadPoolExecutor(max_workers=self.settings.max_workers) as pool:
-            futures = {
-                pool.submit(self._sync_one_repo, repo, org): repo for repo in to_fetch
-            }
+            futures = {pool.submit(self._sync_one_repo, repo, org): repo for repo in to_fetch}
             for future in as_completed(futures):
                 repo = futures[future]
                 try:
@@ -295,3 +301,11 @@ class OrgFetcher:
 
         self.store.touch("org_repos", org)
         return result
+
+
+def _opt_bool(value: object) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def _opt_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None

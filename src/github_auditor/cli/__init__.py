@@ -52,9 +52,7 @@ def _load_context(db: Path | None = None) -> AppContext:
 def _resolve_org(org: str | None, settings: Settings) -> str:
     resolved = org or settings.org
     if not resolved:
-        stderr.print(
-            "[red]No organization given. Pass ORG or set GITHUB_AUDITOR_ORG.[/]"
-        )
+        stderr.print("[red]No organization given. Pass ORG or set GITHUB_AUDITOR_ORG.[/]")
         raise typer.Exit(code=2)
     return resolved
 
@@ -65,12 +63,14 @@ def _severity_option(value: str | None) -> Severity | None:
     try:
         return Severity(value.lower())
     except ValueError as exc:
-        stderr.print(f"[red]Unknown severity '{value}'. "
-                     f"Choose from: {', '.join(s.value for s in Severity)}[/]")
+        stderr.print(
+            f"[red]Unknown severity '{value}'. "
+            f"Choose from: {', '.join(s.value for s in Severity)}[/]"
+        )
         raise typer.Exit(code=2) from exc
 
 
-def _version_callback(value: bool):
+def _version_callback(value: bool) -> None:
     if value:
         stdout.print(f"github-auditor {github_auditor.__version__}")
         raise typer.Exit()
@@ -79,15 +79,19 @@ def _version_callback(value: bool):
 @app.callback()
 def main(
     version: bool = typer.Option(
-        False, "--version", callback=_version_callback, is_eager=True,
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
         help="Show version and exit.",
     ),
-):
+) -> None:
     """github-auditor: find the repos leaving your org at risk."""
 
 
-def _run_sync(ctx: AppContext, org: str, *, refresh: bool, deep: bool,
-              include_archived: bool) -> None:
+def _run_sync(
+    ctx: AppContext, org: str, *, refresh: bool, deep: bool, include_archived: bool
+) -> None:
     from github_auditor.fetch import GitHubClient, OrgFetcher
 
     settings = ctx.settings
@@ -114,7 +118,7 @@ def _run_sync(ctx: AppContext, org: str, *, refresh: bool, deep: bool,
         progress.update(task, total=result.repo_count, completed=result.repo_count)
 
     if deep:
-        _deep_scan(ctx, org, client)
+        _deep_scan(ctx, org)
 
     stderr.print(
         f"Synced [bold]{org}[/]: {result.repo_count} repos "
@@ -126,7 +130,7 @@ def _run_sync(ctx: AppContext, org: str, *, refresh: bool, deep: bool,
         stderr.print(f"[red]fetch error:[/] {error}")
 
 
-def _deep_scan(ctx: AppContext, org: str, client) -> None:
+def _deep_scan(ctx: AppContext, org: str) -> None:
     """Clone repos with workflows and re-read workflow files from disk."""
     from github_auditor.clone import RepoCloner
     from github_auditor.exceptions import CloneError
@@ -134,7 +138,8 @@ def _deep_scan(ctx: AppContext, org: str, client) -> None:
     cloner = RepoCloner(ctx.settings)
     token = ctx.settings.token_value()
     repos = [
-        r for r in ctx.store.list_repos(org)
+        r
+        for r in ctx.store.list_repos(org)
         if not r.archived and ctx.store.get_workflows(r.full_name)
     ]
     with render.make_progress(stderr) as progress:
@@ -151,8 +156,14 @@ def _deep_scan(ctx: AppContext, org: str, client) -> None:
                 progress.advance(task)
 
 
-def _analyze(ctx: AppContext, org: str, *, include_archived: bool,
-             rules: str | None, exclude_rules: str | None) -> AuditReport:
+def _analyze(
+    ctx: AppContext,
+    org: str,
+    *,
+    include_archived: bool,
+    rules: str | None,
+    exclude_rules: str | None,
+) -> AuditReport:
     selected = select_rules(
         include=rules.split(",") if rules else None,
         exclude=exclude_rules.split(",") if exclude_rules else None,
@@ -161,8 +172,14 @@ def _analyze(ctx: AppContext, org: str, *, include_archived: bool,
     return engine.analyze_org(ctx.store, org, include_archived=include_archived)
 
 
-def _emit_report(report: AuditReport, *, format: str, min_severity: Severity | None,
-                 output: Path | None, detail_repo: str | None = None) -> None:
+def _emit_report(
+    report: AuditReport,
+    *,
+    format: str,
+    min_severity: Severity | None,
+    output: Path | None,
+    detail_repo: str | None = None,
+) -> None:
     if min_severity is not None:
         for rr in report.repos:
             rr.findings = [f for f in rr.findings if f.severity >= min_severity]
@@ -172,10 +189,14 @@ def _emit_report(report: AuditReport, *, format: str, min_severity: Severity | N
     elif format == "csv":
         text = export.findings_to_csv(report.findings)
     else:
+
         def _render_to(target: Console) -> None:
             if detail_repo:
-                matches = [r for r in report.repos if r.repo.full_name == detail_repo
-                           or r.repo.name == detail_repo]
+                matches = [
+                    r
+                    for r in report.repos
+                    if r.repo.full_name == detail_repo or r.repo.name == detail_repo
+                ]
                 if not matches:
                     stderr.print(f"[red]Repo '{detail_repo}' not found in report.[/]")
                     raise typer.Exit(code=2)
@@ -203,19 +224,25 @@ def _emit_report(report: AuditReport, *, format: str, min_severity: Severity | N
 def audit(
     org: str = typer.Argument(None, help="Organization (or user) to audit."),
     refresh: bool = typer.Option(False, "--refresh", help="Ignore cache TTL and re-fetch."),
-    deep: bool = typer.Option(False, "--deep", help="Also clone repos to scan workflow files "
-                              "from disk (catches files the API listing misses)."),
+    deep: bool = typer.Option(
+        False,
+        "--deep",
+        help="Also clone repos to scan workflow files "
+        "from disk (catches files the API listing misses).",
+    ),
     include_archived: bool = typer.Option(True, "--include-archived/--no-archived"),
     format: str = typer.Option("table", "--format", "-f", help="table, json, or csv."),
     min_severity: str = typer.Option(None, "--min-severity", help="Hide findings below this."),
     rules: str = typer.Option(None, "--rules", help="Comma-separated rule ids to run."),
-    exclude_rules: str = typer.Option(None, "--exclude-rules",
-                                      help="Comma-separated rule ids to skip."),
-    fail_on: str = typer.Option(None, "--fail-on", help="Exit 1 if any finding is at or above "
-                                "this severity (for CI)."),
+    exclude_rules: str = typer.Option(
+        None, "--exclude-rules", help="Comma-separated rule ids to skip."
+    ),
+    fail_on: str = typer.Option(
+        None, "--fail-on", help="Exit 1 if any finding is at or above this severity (for CI)."
+    ),
     output: Path = typer.Option(None, "--output", "-o", help="Write the report to a file."),
     db: Path = typer.Option(None, "--db", help="Cache database path override."),
-):
+) -> None:
     """Fetch (respecting the cache TTL), analyze, and render a full audit."""
     ctx = _load_context(db)
     target = _resolve_org(org, ctx.settings)
@@ -224,10 +251,10 @@ def audit(
     except AuditorError as exc:
         stderr.print(f"[red]{exc}[/]")
         raise typer.Exit(code=2) from exc
-    report = _analyze(ctx, target, include_archived=include_archived,
-                      rules=rules, exclude_rules=exclude_rules)
-    _emit_report(report, format=format, min_severity=_severity_option(min_severity),
-                 output=output)
+    report = _analyze(
+        ctx, target, include_archived=include_archived, rules=rules, exclude_rules=exclude_rules
+    )
+    _emit_report(report, format=format, min_severity=_severity_option(min_severity), output=output)
 
     threshold = _severity_option(fail_on)
     if threshold is not None and any(f.severity >= threshold for f in report.findings):
@@ -241,7 +268,7 @@ def fetch(
     deep: bool = typer.Option(False, "--deep", help="Also clone repos with workflows."),
     include_archived: bool = typer.Option(True, "--include-archived/--no-archived"),
     db: Path = typer.Option(None, "--db", help="Cache database path override."),
-):
+) -> None:
     """Populate the local cache without analyzing (alias: sync)."""
     ctx = _load_context(db)
     target = _resolve_org(org, ctx.settings)
@@ -264,17 +291,23 @@ def report(
     include_archived: bool = typer.Option(True, "--include-archived/--no-archived"),
     output: Path = typer.Option(None, "--output", "-o"),
     db: Path = typer.Option(None, "--db"),
-):
+) -> None:
     """Re-analyze cached data and render the report. No network access."""
     ctx = _load_context(db)
     target = _resolve_org(org, ctx.settings)
     if not ctx.store.list_repos(target):
         stderr.print(f"[red]Nothing cached for '{target}'. Run 'gha fetch {target}' first.[/]")
         raise typer.Exit(code=2)
-    audit_report = _analyze(ctx, target, include_archived=include_archived,
-                            rules=None, exclude_rules=None)
-    _emit_report(audit_report, format=format, min_severity=_severity_option(min_severity),
-                 output=output, detail_repo=repo)
+    audit_report = _analyze(
+        ctx, target, include_archived=include_archived, rules=None, exclude_rules=None
+    )
+    _emit_report(
+        audit_report,
+        format=format,
+        min_severity=_severity_option(min_severity),
+        output=output,
+        detail_repo=repo,
+    )
 
 
 @app.command()
@@ -282,7 +315,7 @@ def repos(
     org: str = typer.Argument(None),
     sort: str = typer.Option("score", "--sort", help="score, name, or pushed."),
     db: Path = typer.Option(None, "--db"),
-):
+) -> None:
     """List cached repos with their risk scores."""
     from rich.table import Table
 
@@ -335,7 +368,7 @@ def findings(
     repo: str = typer.Option(None, "--repo", help="Filter by repo full name."),
     format: str = typer.Option("table", "--format", "-f"),
     db: Path = typer.Option(None, "--db"),
-):
+) -> None:
     """Show findings from the latest audit run in the cache."""
     ctx = _load_context(db)
     target = _resolve_org(org, ctx.settings)
@@ -347,8 +380,9 @@ def findings(
         repo=repo,
     )
     if not results and ctx.store.latest_run_id(target) is None:
-        stderr.print(f"[red]No audit runs cached for '{target}'. "
-                     f"Run 'gha audit {target}' first.[/]")
+        stderr.print(
+            f"[red]No audit runs cached for '{target}'. Run 'gha audit {target}' first.[/]"
+        )
         raise typer.Exit(code=2)
     if format == "json":
         print(export.findings_to_json(results))
@@ -359,13 +393,13 @@ def findings(
 
 
 @app.command()
-def rules():
+def rules() -> None:
     """List every rule this auditor can run."""
     render.render_rules_table(select_rules(), stdout)
 
 
 @cache_app.command("info")
-def cache_info(db: Path = typer.Option(None, "--db")):
+def cache_info(db: Path = typer.Option(None, "--db")) -> None:
     """Show what the local cache holds."""
     ctx = _load_context(db)
     db_path = ctx.settings.effective_db_path
@@ -377,11 +411,10 @@ def cache_info(db: Path = typer.Option(None, "--db")):
 @cache_app.command("clear")
 def cache_clear(
     org: str = typer.Option(None, "--org", help="Only clear one org's data."),
-    clones: bool = typer.Option(True, "--clones/--no-clones",
-                                help="Also delete cached clones."),
+    clones: bool = typer.Option(True, "--clones/--no-clones", help="Also delete cached clones."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation."),
     db: Path = typer.Option(None, "--db"),
-):
+) -> None:
     """Clear cached API data (and clones)."""
     ctx = _load_context(db)
     scope = f"org '{org}'" if org else "ALL cached data"

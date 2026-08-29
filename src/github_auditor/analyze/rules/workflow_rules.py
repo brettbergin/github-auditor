@@ -57,9 +57,7 @@ class PwnRequestRule(Rule):
             if not wf.has_trigger("pull_request_target", "issue_comment"):
                 continue
             trigger = (
-                "pull_request_target"
-                if "pull_request_target" in wf.triggers
-                else "issue_comment"
+                "pull_request_target" if "pull_request_target" in wf.triggers else "issue_comment"
             )
             for job in wf.jobs:
                 for step in job.steps:

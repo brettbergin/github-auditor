@@ -9,8 +9,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
+from typing import TypeAlias
 
 from pydantic import BaseModel, Field
+
+# JSON-shaped payloads (cache rows, raw API data). Values are `object` rather
+# than `Any` so every consumer must narrow before use.
+JSONDict: TypeAlias = dict[str, object]
 
 SEVERITY_ORDER = ["info", "low", "medium", "high", "critical"]
 
@@ -40,7 +45,7 @@ class Severity(str, Enum):
             "info": "dim",
         }[self.value]
 
-    def __ge__(self, other: object) -> bool:  # type: ignore[override]
+    def __ge__(self, other: object) -> bool:
         if isinstance(other, Severity):
             return self.rank >= other.rank
         return NotImplemented

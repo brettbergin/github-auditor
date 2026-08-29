@@ -21,8 +21,7 @@ def test_public_self_hosted_runner_registered():
     repo = make_repo(has_self_hosted_runners=True)
     ctx = make_ctx(
         repo=repo,
-        repo_runners=[RunnerInfo(name="runner-1", level="repo",
-                                 repo_full_name=repo.full_name)],
+        repo_runners=[RunnerInfo(name="runner-1", level="repo", repo_full_name=repo.full_name)],
     )
     findings = run_rule(PublicSelfHostedRunnerRule(), ctx)
     assert len(findings) == 1
@@ -37,8 +36,9 @@ def test_self_hosted_labels_fallback():
 
 
 def test_self_hosted_private_repo_skipped():
-    ctx = make_ctx(["self_hosted.yml"],
-                   repo=make_repo(visibility="private", has_self_hosted_runners=True))
+    ctx = make_ctx(
+        ["self_hosted.yml"], repo=make_repo(visibility="private", has_self_hosted_runners=True)
+    )
     assert run_rule(PublicSelfHostedRunnerRule(), ctx) == []
 
 

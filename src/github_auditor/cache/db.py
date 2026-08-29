@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, event, text
+from sqlalchemy.engine.interfaces import DBAPIConnection
+from sqlalchemy.pool import ConnectionPoolEntry
 
 from github_auditor.cache.orm import SCHEMA_VERSION, Base
 from github_auditor.exceptions import CacheError
@@ -20,7 +22,7 @@ def create_db_engine(db_path: Path | str) -> Engine:
     engine = create_engine(url, connect_args={"check_same_thread": False})
 
     @event.listens_for(engine, "connect")
-    def _set_pragmas(dbapi_conn, _record):
+    def _set_pragmas(dbapi_conn: DBAPIConnection, _record: ConnectionPoolEntry) -> None:
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA foreign_keys=ON")

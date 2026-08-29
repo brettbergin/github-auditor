@@ -91,13 +91,22 @@ def test_fetch_repo_details_with_data(client, store, settings):
         if url.endswith("/actions/permissions"):
             return {}, {"enabled": True, "allowed_actions": "all"}
         if url.endswith("/actions/permissions/workflow"):
-            return {}, {"default_workflow_permissions": "write",
-                        "can_approve_pull_request_reviews": True}
+            return {}, {
+                "default_workflow_permissions": "write",
+                "can_approve_pull_request_reviews": True,
+            }
         if url.endswith("/actions/runners"):
-            return {}, {"total_count": 1, "runners": [
-                {"name": "buildbox", "os": "linux", "status": "online",
-                 "labels": [{"name": "self-hosted"}]},
-            ]}
+            return {}, {
+                "total_count": 1,
+                "runners": [
+                    {
+                        "name": "buildbox",
+                        "os": "linux",
+                        "status": "online",
+                        "labels": [{"name": "self-hosted"}],
+                    },
+                ],
+            }
         raise GithubException(404, {}, None)
 
     repo._requester.requestJsonAndCheck.side_effect = request_json
@@ -158,9 +167,7 @@ def test_sync_skips_fresh_repos(client, store, settings, monkeypatch):
 
     called = []
     fetcher = OrgFetcher(client, store, settings)
-    monkeypatch.setattr(
-        fetcher, "_sync_one_repo", lambda r, o: called.append(r.full_name)
-    )
+    monkeypatch.setattr(fetcher, "_sync_one_repo", lambda r, o: called.append(r.full_name))
 
     result = fetcher.sync("testorg")
     assert result.repo_count == 1

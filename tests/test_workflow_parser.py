@@ -17,8 +17,7 @@ def test_trigger_forms_normalize():
     for content, expected in [
         ("on: push\njobs: {}", {"push"}),
         ("on: [push, pull_request]\njobs: {}", {"push", "pull_request"}),
-        ("on:\n  pull_request_target:\n    types: [opened]\njobs: {}",
-         {"pull_request_target"}),
+        ("on:\n  pull_request_target:\n    types: [opened]\njobs: {}", {"pull_request_target"}),
     ]:
         wf = parse_workflow(content, "wf.yml")
         assert set(wf.triggers) == expected

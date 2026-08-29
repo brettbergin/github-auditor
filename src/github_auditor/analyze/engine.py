@@ -89,8 +89,7 @@ class RuleEngine:
             org_info=store.get_org(org),
             org_runners=[r for r in all_runners if r.level == "org"],
             repo_runners=[
-                r for r in all_runners
-                if r.level == "repo" and r.repo_full_name == repo.full_name
+                r for r in all_runners if r.level == "repo" and r.repo_full_name == repo.full_name
             ],
             settings=self.settings,
         )

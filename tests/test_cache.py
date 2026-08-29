@@ -48,18 +48,28 @@ def test_ttl_freshness(store):
 def test_workflows_roundtrip(store):
     repo = make_repo(id=7)
     store.upsert_repo(repo)
-    store.upsert_workflows(7, [
-        WorkflowInfo(repo_full_name=repo.full_name, path=".github/workflows/ci.yml",
-                     content="on: push"),
-    ])
+    store.upsert_workflows(
+        7,
+        [
+            WorkflowInfo(
+                repo_full_name=repo.full_name, path=".github/workflows/ci.yml", content="on: push"
+            ),
+        ],
+    )
     wfs = store.get_workflows(repo.full_name)
     assert len(wfs) == 1
     assert wfs[0].content == "on: push"
     # Re-upsert replaces rather than duplicates.
-    store.upsert_workflows(7, [
-        WorkflowInfo(repo_full_name=repo.full_name, path=".github/workflows/ci.yml",
-                     content="on: pull_request"),
-    ])
+    store.upsert_workflows(
+        7,
+        [
+            WorkflowInfo(
+                repo_full_name=repo.full_name,
+                path=".github/workflows/ci.yml",
+                content="on: pull_request",
+            ),
+        ],
+    )
     assert [w.content for w in store.get_workflows(repo.full_name)] == ["on: pull_request"]
 
 
@@ -82,11 +92,14 @@ def _finding(repo="testorg/a", rule_id="GHA001", severity=Severity.HIGH):
 
 def test_findings_query(store):
     run = store.start_audit_run("testorg")
-    store.save_findings(run, [
-        _finding(severity=Severity.CRITICAL),
-        _finding(rule_id="ACC001", severity=Severity.LOW),
-        _finding(repo="testorg/b", rule_id="REPO002", severity=Severity.MEDIUM),
-    ])
+    store.save_findings(
+        run,
+        [
+            _finding(severity=Severity.CRITICAL),
+            _finding(rule_id="ACC001", severity=Severity.LOW),
+            _finding(repo="testorg/b", rule_id="REPO002", severity=Severity.MEDIUM),
+        ],
+    )
     store.finish_audit_run(run, repo_count=2, finding_count=3)
 
     all_f = store.latest_findings("testorg")

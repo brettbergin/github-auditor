@@ -39,6 +39,9 @@ dev = [
   "pytest>=8",
   "pytest-mock>=3.12",
   "ruff>=0.5",
+  "mypy>=1.10",
+  "bandit>=1.7",
+  "types-PyYAML>=6.0",
 ]
 
 [project.urls]
@@ -67,3 +70,26 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/github_auditor"]
+strict = true
+disallow_any_explicit = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+# disallow_any_explicit fires on every `class X(BaseModel)` statement because
+# pydantic's own base classes carry `Any` internally — that is pydantic's code,
+# not ours, so the flag is relaxed for the modules that define pydantic models.
+# Our code in these modules is still Any-free and all other strict checks
+# (including disallow_any_generics) remain enforced.
+module = [
+  "github_auditor.models",
+  "github_auditor.config",
+  "github_auditor.analyze.workflow_parser",
+]
+disallow_any_explicit = false
+
+[tool.bandit]
+exclude_dirs = ["tests"]

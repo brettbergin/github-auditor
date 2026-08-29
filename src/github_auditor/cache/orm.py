@@ -7,17 +7,18 @@ Pydantic model dump is stored in a JSON ``data`` column for lossless round-trips
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy import JSON, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from github_auditor.models import JSONDict
 
 SCHEMA_VERSION = 1
 
 
 class Base(DeclarativeBase):
     type_annotation_map = {
-        dict[str, Any]: JSON,
+        JSONDict: JSON,
         datetime: DateTime(timezone=True),
     }
 
@@ -26,7 +27,7 @@ class OrgRow(Base):
     __tablename__ = "orgs"
 
     login: Mapped[str] = mapped_column(primary_key=True)
-    data: Mapped[dict[str, Any]] = mapped_column(JSON)
+    data: Mapped[JSONDict] = mapped_column(JSON)
     fetched_at: Mapped[datetime]
 
 
@@ -39,7 +40,7 @@ class RepoRow(Base):
     visibility: Mapped[str]
     archived: Mapped[bool]
     pushed_at: Mapped[datetime | None]
-    data: Mapped[dict[str, Any]] = mapped_column(JSON)
+    data: Mapped[JSONDict] = mapped_column(JSON)
     fetched_at: Mapped[datetime]
 
     workflows: Mapped[list[WorkflowRow]] = relationship(
@@ -70,7 +71,7 @@ class RunnerRow(Base):
     org_login: Mapped[str] = mapped_column(index=True)
     level: Mapped[str]  # org / repo
     repo_full_name: Mapped[str | None] = mapped_column(index=True)
-    data: Mapped[dict[str, Any]] = mapped_column(JSON)
+    data: Mapped[JSONDict] = mapped_column(JSON)
     fetched_at: Mapped[datetime]
 
 
@@ -97,7 +98,7 @@ class FindingRow(Base):
     repo_full_name: Mapped[str] = mapped_column(index=True)
     rule_id: Mapped[str] = mapped_column(index=True)
     severity: Mapped[str] = mapped_column(index=True)
-    data: Mapped[dict[str, Any]] = mapped_column(JSON)
+    data: Mapped[JSONDict] = mapped_column(JSON)
 
     run: Mapped[AuditRunRow] = relationship(back_populates="findings")
 

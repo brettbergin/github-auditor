@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from github import Auth, Github, GithubRetry
 from github.GithubException import (
@@ -25,7 +25,7 @@ from github.Repository import Repository
 
 from github_auditor.config import Settings
 from github_auditor.exceptions import AuthError, RateLimitError
-from github_auditor.models import RunnerInfo
+from github_auditor.models import JSONDict, RunnerInfo
 
 T = TypeVar("T")
 
@@ -62,7 +62,7 @@ class GitHubClient:
         return TokenInfo(login=login, authenticated=True, scopes=list(scopes))
 
     def rate_limit_remaining(self) -> int:
-        return self.gh.get_rate_limit().core.remaining
+        return self.gh.get_rate_limit().resources.core.remaining
 
     # -- call guards -------------------------------------------------------
 
@@ -71,7 +71,7 @@ class GitHubClient:
         try:
             return fn()
         except RateLimitExceededException as exc:
-            reset = self.gh.get_rate_limit().core.reset
+            reset = self.gh.get_rate_limit().resources.core.reset
             wait = max(0.0, reset.timestamp() - time.time()) + 5
             if wait > 3600:
                 raise RateLimitError(
@@ -106,26 +106,22 @@ class GitHubClient:
             raise AuthError(f"No organization or user named '{name}' is visible.") from exc
         except GithubException as exc:
             message = (exc.data or {}).get("message", exc.data)
-            raise AuthError(
-                f"Could not look up '{name}': {exc.status} {message}"
-            ) from exc
+            raise AuthError(f"Could not look up '{name}': {exc.status} {message}") from exc
 
     # -- raw endpoints PyGithub doesn't cover well -------------------------
 
-    def _get_json(self, repo: Repository, suffix: str) -> dict[str, Any] | None:
-        def call() -> dict[str, Any]:
-            _headers, data = repo._requester.requestJsonAndCheck(
-                "GET", f"{repo.url}{suffix}"
-            )
-            return data
+    def _get_json(self, repo: Repository, suffix: str) -> JSONDict | None:
+        def call() -> JSONDict:
+            _headers, data = repo._requester.requestJsonAndCheck("GET", f"{repo.url}{suffix}")
+            return {str(k): v for k, v in data.items()} if isinstance(data, dict) else {}
 
         return self.optional(call)
 
-    def get_actions_permissions(self, repo: Repository) -> dict[str, Any] | None:
+    def get_actions_permissions(self, repo: Repository) -> JSONDict | None:
         """{enabled: bool, allowed_actions: all|local_only|selected}"""
         return self._get_json(repo, "/actions/permissions")
 
-    def get_workflow_permissions(self, repo: Repository) -> dict[str, Any] | None:
+    def get_workflow_permissions(self, repo: Repository) -> JSONDict | None:
         """{default_workflow_permissions: read|write, can_approve_pull_request_reviews: bool}"""
         return self._get_json(repo, "/actions/permissions/workflow")
 
@@ -133,38 +129,17 @@ class GitHubClient:
         data = self._get_json(repo, "/actions/runners")
         if data is None:
             return None
-        return [
-            RunnerInfo(
-                name=r.get("name", ""),
-                os=r.get("os"),
-                status=r.get("status"),
-                labels=[label.get("name", "") for label in r.get("labels", [])],
-                level="repo",
-                repo_full_name=repo.full_name,
-            )
-            for r in data.get("runners", [])
-        ]
+        return _runners_from(data, level="repo", repo_full_name=repo.full_name)
 
     def list_org_runners(self, org: Organization) -> list[RunnerInfo] | None:
-        def call() -> dict[str, Any]:
-            _headers, data = org._requester.requestJsonAndCheck(
-                "GET", f"{org.url}/actions/runners"
-            )
-            return data
+        def call() -> JSONDict:
+            _headers, data = org._requester.requestJsonAndCheck("GET", f"{org.url}/actions/runners")
+            return {str(k): v for k, v in data.items()} if isinstance(data, dict) else {}
 
         data = self.optional(call)
         if data is None:
             return None
-        return [
-            RunnerInfo(
-                name=r.get("name", ""),
-                os=r.get("os"),
-                status=r.get("status"),
-                labels=[label.get("name", "") for label in r.get("labels", [])],
-                level="org",
-            )
-            for r in data.get("runners", [])
-        ]
+        return _runners_from(data, level="org", repo_full_name=None)
 
     def get_dependabot_alerts_enabled(self, repo: Repository) -> bool | None:
         """204 = enabled, 404 = disabled — distinct from a permissions failure."""
@@ -174,3 +149,35 @@ class GitHubClient:
             if exc.status in NOT_VISIBLE_STATUSES:
                 return None
             raise
+
+
+def _opt_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _runners_from(data: JSONDict, *, level: str, repo_full_name: str | None) -> list[RunnerInfo]:
+    """Build RunnerInfo models from a /actions/runners payload, narrowing as we go."""
+    runners: list[RunnerInfo] = []
+    entries = data.get("runners")
+    if not isinstance(entries, list):
+        return runners
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        labels_raw = entry.get("labels")
+        labels = (
+            [str(label.get("name", "")) for label in labels_raw if isinstance(label, dict)]
+            if isinstance(labels_raw, list)
+            else []
+        )
+        runners.append(
+            RunnerInfo(
+                name=str(entry.get("name", "")),
+                os=_opt_str(entry.get("os")),
+                status=_opt_str(entry.get("status")),
+                labels=labels,
+                level=level,
+                repo_full_name=repo_full_name,
+            )
+        )
+    return runners

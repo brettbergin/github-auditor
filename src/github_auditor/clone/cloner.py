@@ -8,10 +8,11 @@ after, so credentials never persist on disk.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from git import GitCommandError, Repo
+from git import GitCommandError, Remote, Repo
 
 from github_auditor.config import Settings
 from github_auditor.exceptions import CloneError
@@ -27,7 +28,7 @@ def _with_token(url: str, token: str | None) -> str:
 
 
 @contextmanager
-def _authenticated_remote(repo: Repo, clean_url: str, token: str | None):
+def _authenticated_remote(repo: Repo, clean_url: str, token: str | None) -> Iterator[Remote]:
     """Temporarily point origin at a token-embedded URL; always restore the clean one."""
     try:
         repo.remotes.origin.set_url(_with_token(clean_url, token))

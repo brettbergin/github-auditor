@@ -288,8 +288,15 @@ class CacheStore:
     def clear(self, *, org: str | None = None) -> None:
         with self._write_lock, self._session() as session:
             if org is None:
-                for table in (FindingRow, AuditRunRow, WorkflowRow, RunnerRow, RepoRow,
-                              OrgRow, FetchMetaRow):
+                for table in (
+                    FindingRow,
+                    AuditRunRow,
+                    WorkflowRow,
+                    RunnerRow,
+                    RepoRow,
+                    OrgRow,
+                    FetchMetaRow,
+                ):
                     session.execute(delete(table))
             else:
                 run_ids = select(AuditRunRow.id).where(AuditRunRow.org_login == org)

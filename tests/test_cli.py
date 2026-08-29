@@ -24,11 +24,16 @@ def seeded_db(tmp_path):
     store = CacheStore(engine)
     repo = make_repo(id=1)
     store.upsert_repo(repo)
-    store.upsert_workflows(1, [
-        WorkflowInfo(repo_full_name=repo.full_name,
-                     path=".github/workflows/pwn.yml",
-                     content=load_fixture("pwn_request_vuln.yml")),
-    ])
+    store.upsert_workflows(
+        1,
+        [
+            WorkflowInfo(
+                repo_full_name=repo.full_name,
+                path=".github/workflows/pwn.yml",
+                content=load_fixture("pwn_request_vuln.yml"),
+            ),
+        ],
+    )
     RuleEngine().analyze_org(store, "testorg")
     engine.dispose()
     return db_path
@@ -54,16 +59,16 @@ def test_cache_info(tmp_path):
 
 
 def test_findings_json(seeded_db):
-    result = runner.invoke(app, ["findings", "testorg", "--db", str(seeded_db),
-                                 "--format", "json"])
+    result = runner.invoke(app, ["findings", "testorg", "--db", str(seeded_db), "--format", "json"])
     assert result.exit_code == 0
     findings = json.loads(result.stdout)
     assert any(f["rule_id"] == "GHA001" for f in findings)
 
 
 def test_findings_filters(seeded_db):
-    result = runner.invoke(app, ["findings", "testorg", "--db", str(seeded_db),
-                                 "--rule", "GHA001", "--format", "csv"])
+    result = runner.invoke(
+        app, ["findings", "testorg", "--db", str(seeded_db), "--rule", "GHA001", "--format", "csv"]
+    )
     assert result.exit_code == 0
     assert "GHA001" in result.stdout
 
