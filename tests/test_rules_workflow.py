@@ -35,13 +35,21 @@ def test_unpinned_actions():
     assert findings[0].severity == Severity.MEDIUM
 
 
-def test_unpinned_action_high_under_dangerous_trigger():
-    # write_all_perms.yml is pull_request_target but only uses trusted actions;
-    # craft the check via pwn fixture which uses actions/checkout (trusted) — so
-    # instead verify escalation on the vulnerable trigger with unpinned.yml logic
-    # by checking severities differ between fixtures sharing an unpinned action.
-    findings = run_rule(UnpinnedActionRule(), make_ctx(["unpinned.yml"]))
-    assert all(f.severity == Severity.MEDIUM for f in findings)
+def test_unpinned_action_deduped_per_repo():
+    """The same action across multiple workflows yields one finding listing
+    every use site, not one finding per workflow."""
+    findings = run_rule(UnpinnedActionRule(), make_ctx(["unpinned.yml", "unpinned.yml"]))
+    assert len(findings) == 1
+    assert "2 step(s)" in findings[0].evidence
+
+
+def test_unpinned_action_high_when_any_use_is_dangerous():
+    """One safe-trigger use plus one pull_request_target use of the same action
+    escalates the single deduped finding to high."""
+    findings = run_rule(UnpinnedActionRule(), make_ctx(["unpinned.yml", "unpinned_pr_target.yml"]))
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.HIGH
+    assert "2 step(s)" in findings[0].evidence
 
 
 def test_external_reusable_workflow():

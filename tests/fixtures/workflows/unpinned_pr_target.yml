@@ -1,0 +1,14 @@
+# The same unpinned action as unpinned.yml, but under a dangerous trigger —
+# GHA002 must escalate the deduped repo-level finding to high.
+name: PR triage
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: tj-actions/changed-files@v44

@@ -89,28 +89,34 @@ class UnpinnedActionRule(Rule):
     )
 
     def check(self, ctx: RepoContext) -> Iterator[Finding]:
+        # One finding per unique unpinned action per repo — the fix (pin it) is
+        # one change even when the action appears in a dozen workflows. High if
+        # any occurrence runs under a dangerous trigger.
         trusted = ctx.settings.trusted_action_owners
+        locations: dict[str, list[str]] = {}
+        dangerous_uses: set[str] = set()
         for wf in ctx.workflows:
             dangerous = any(t in wf.triggers for t in DANGEROUS_TRIGGERS)
-            seen: set[str] = set()
             for job in wf.jobs:
                 for step in job.steps:
                     uses = step.uses
-                    if not uses or uses in seen:
-                        continue
-                    if uses.startswith("docker://"):
+                    if not uses or uses.startswith("docker://"):
                         continue
                     if is_local_or_trusted(uses, ctx.org, trusted) or is_sha_pinned(uses):
                         continue
-                    seen.add(uses)
-                    _, ref = split_uses(uses)
-                    yield self.finding(
-                        ctx,
-                        title=f"Third-party action not SHA-pinned: {uses}",
-                        severity=Severity.HIGH if dangerous else Severity.MEDIUM,
-                        location=_loc(wf, job, step.label),
-                        evidence=f"uses: {uses} (ref '{ref or 'none'}' is mutable)",
-                    )
+                    locations.setdefault(uses, []).append(_loc(wf, job, step.label))
+                    if dangerous:
+                        dangerous_uses.add(uses)
+        for uses, locs in locations.items():
+            _, ref = split_uses(uses)
+            shown = "; ".join(locs[:3]) + (f"; +{len(locs) - 3} more" if len(locs) > 3 else "")
+            yield self.finding(
+                ctx,
+                title=f"Third-party action not SHA-pinned: {uses}",
+                severity=Severity.HIGH if uses in dangerous_uses else Severity.MEDIUM,
+                location=locs[0],
+                evidence=f"ref '{ref or 'none'}' is mutable; used at {len(locs)} step(s): {shown}",
+            )
 
 
 class ExternalReusableWorkflowRule(Rule):
