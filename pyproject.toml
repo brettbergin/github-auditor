@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "github-auditor"
+version = "0.1.0"
+description = "Audit a GitHub organization for repositories that put you at risk: vulnerable workflows, exposed runners, weak repo security posture."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Brett Bergin" }]
+requires-python = ">=3.10"
+keywords = ["github", "security", "audit", "actions", "workflows", "supply-chain"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: System Administrators",
+  "Intended Audience :: Information Technology",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Security",
+]
+dependencies = [
+  "PyGithub>=2.3",
+  "GitPython>=3.1",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.2",
+  "SQLAlchemy>=2.0",
+  "rich>=13.7",
+  "typer>=0.12",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "pytest-mock>=3.12",
+  "ruff>=0.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/brettbergin/github-auditor"
+Issues = "https://github.com/brettbergin/github-auditor/issues"
+
+[project.scripts]
+github-auditor = "github_auditor.cli:app"
+gha = "github_auditor.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/github_auditor"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# typer.Option/Argument in defaults is the idiomatic Typer API.
+"src/github_auditor/cli/__init__.py" = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
