@@ -1,8 +1,9 @@
 from conftest import load_fixture, make_ctx, make_repo
 from github_auditor.analyze.engine import RuleEngine, select_rules
-from github_auditor.analyze.rules import ALL_RULES
+from github_auditor.analyze.rules import ALL_ORG_RULES, ALL_RULES
 from github_auditor.models import (
     Finding,
+    OrgInfo,
     Severity,
     WorkflowInfo,
     risk_grade,
@@ -11,9 +12,10 @@ from github_auditor.models import (
 
 
 def test_all_rules_have_unique_ids():
-    ids = [r.id for r in ALL_RULES]
+    ids = [r.id for r in (*ALL_RULES, *ALL_ORG_RULES)]
     assert len(ids) == len(set(ids))
     assert len(ALL_RULES) == 21
+    assert len(ALL_ORG_RULES) == 6
 
 
 def test_select_rules_include_exclude():
@@ -74,3 +76,31 @@ def test_analyze_org_from_cache(store):
     # Findings were persisted as the latest run.
     assert store.latest_findings("testorg")
     assert report.sorted_repos()[0].risk_score > 0
+
+
+def test_org_rules_run_and_attach_to_report(store):
+    """Org findings are produced once per audit, not per repo, and persist."""
+    store.upsert_org(
+        OrgInfo(
+            login="testorg",
+            two_factor_requirement_enabled=False,
+            default_repository_permission="admin",
+        )
+    )
+    store.upsert_repo(make_repo(id=1))
+    report = RuleEngine().analyze_org(store, "testorg")
+
+    org_rule_ids = {f.rule_id for f in report.org_findings}
+    assert {"ORG001", "ORG002"} <= org_rule_ids
+    assert all(f.is_org_scoped for f in report.org_findings)
+    # Reported once for the org, not duplicated onto the repo.
+    assert not any(f.rule_id.startswith("ORG") for r in report.repos for f in r.findings)
+    # And they are counted in the totals and persisted with the run.
+    assert report.severity_totals()["high"] >= 2
+    assert any(f.rule_id == "ORG001" for f in store.latest_findings("testorg"))
+
+
+def test_org_rules_skipped_when_org_not_cached(store):
+    store.upsert_repo(make_repo(id=1))
+    report = RuleEngine().analyze_org(store, "testorg")
+    assert report.org_findings == []

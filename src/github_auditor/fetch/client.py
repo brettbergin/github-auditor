@@ -131,15 +131,29 @@ class GitHubClient:
             return None
         return _runners_from(data, level="repo", repo_full_name=repo.full_name)
 
-    def list_org_runners(self, org: Organization) -> list[RunnerInfo] | None:
+    def _get_org_json(self, org: Organization, suffix: str) -> JSONDict | None:
         def call() -> JSONDict:
-            _headers, data = org._requester.requestJsonAndCheck("GET", f"{org.url}/actions/runners")
+            _headers, data = org._requester.requestJsonAndCheck("GET", f"{org.url}{suffix}")
             return {str(k): v for k, v in data.items()} if isinstance(data, dict) else {}
 
-        data = self.optional(call)
+        return self.optional(call)
+
+    def list_org_runners(self, org: Organization) -> list[RunnerInfo] | None:
+        data = self._get_org_json(org, "/actions/runners")
         if data is None:
             return None
         return _runners_from(data, level="org", repo_full_name=None)
+
+    def get_org_workflow_permissions(self, org: Organization) -> JSONDict | None:
+        """{default_workflow_permissions, can_approve_pull_request_reviews} org-wide."""
+        return self._get_org_json(org, "/actions/permissions/workflow")
+
+    def get_org_fork_pr_approval_policy(self, org: Organization) -> str | None:
+        """Approval policy for workflows on pull requests from forks."""
+        data = self._get_org_json(org, "/actions/permissions/fork-pr-contributor-approval")
+        if data is None:
+            return None
+        return _opt_str(data.get("approval_policy"))
 
     def get_dependabot_alerts_enabled(self, repo: Repository) -> bool | None:
         """204 = enabled, 404 = disabled — distinct from a permissions failure."""

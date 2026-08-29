@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import (
@@ -16,7 +18,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
 
-from github_auditor.analyze.rules import Rule
+from github_auditor.analyze.rules.base import RuleBase
 from github_auditor.cache.store import CacheStats
 from github_auditor.models import AuditReport, Finding, RepoRiskReport, Severity
 
@@ -43,6 +45,26 @@ def make_progress(console: Console) -> Progress:
     )
 
 
+def render_org_findings(report: AuditReport, console: Console) -> None:
+    """Org-wide findings, shown first: each one applies to every repo below it."""
+    if not report.org_findings:
+        return
+    tree = Tree(
+        Text.assemble(
+            ("Organization settings", "bold"),
+            f"  ({len(report.org_findings)} finding(s) affecting every repository)",
+        )
+    )
+    for f in sorted(report.org_findings, key=lambda f: -f.severity.rank):
+        node = tree.add(Text.assemble(severity_text(f.severity), f"  {f.rule_id}  {f.title}"))
+        if f.evidence:
+            node.add(Text(f.evidence, style="dim italic"))
+        if f.remediation:
+            node.add(Text(f"fix: {f.remediation}", style="green"))
+    console.print(tree)
+    console.print()
+
+
 def render_audit_summary(report: AuditReport, console: Console, *, min_grade: str = "A") -> None:
     totals = report.severity_totals()
     header = Text()
@@ -55,11 +77,13 @@ def render_audit_summary(report: AuditReport, console: Console, *, min_grade: st
         header.append(f"{sev.value.upper()}: {count}   ", style=style)
     console.print(Panel(header, title="GitHub Security Audit", border_style="blue"))
 
+    render_org_findings(report, console)
+
     at_risk = [r for r in report.sorted_repos() if r.findings]
     clean = len(report.repos) - len(at_risk)
 
     if not at_risk:
-        console.print("[bold green]No findings — every audited repo came back clean.[/]")
+        console.print("[bold green]Every audited repository came back clean.[/]")
         return
 
     table = Table(title="Repositories by risk", expand=True)
@@ -142,7 +166,7 @@ def render_findings_table(findings: list[Finding], console: Console) -> None:
     console.print(f"[dim]{len(findings)} finding(s)[/]")
 
 
-def render_rules_table(rules: list[Rule], console: Console) -> None:
+def render_rules_table(rules: Sequence[RuleBase], console: Console) -> None:
     table = Table(title="Available rules", expand=True)
     table.add_column("ID", no_wrap=True)
     table.add_column("Name", no_wrap=True)

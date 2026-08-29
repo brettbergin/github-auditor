@@ -19,6 +19,10 @@ JSONDict: TypeAlias = dict[str, object]
 
 SEVERITY_ORDER = ["info", "low", "medium", "high", "critical"]
 
+# Sentinel used as Finding.repo for findings that belong to the organization
+# itself rather than to any one repository.
+ORG_SCOPE = "<organization>"
+
 
 class Severity(str, Enum):
     CRITICAL = "critical"
@@ -91,8 +95,17 @@ class OrgInfo(BaseModel):
     id: int | None = None
     name: str | None = None
     is_user: bool = False  # target is a user account, not an organization
+
+    # Tri-state org posture (None = not visible to this token; most of these
+    # require org-owner or admin:org read).
     two_factor_requirement_enabled: bool | None = None
-    default_repository_permission: str | None = None
+    default_repository_permission: str | None = None  # none / read / write / admin
+    members_can_create_public_repositories: bool | None = None
+    default_workflow_permissions: str | None = None  # read / write
+    can_approve_pull_request_reviews: bool | None = None
+    # Fork-PR approval policy, e.g. first_time_contributors_new_to_github /
+    # first_time_contributors / all_external_contributors.
+    fork_pr_approval_policy: str | None = None
     fetched_at: datetime = Field(default_factory=utcnow)
 
 
@@ -145,10 +158,16 @@ class Finding(BaseModel):
     title: str
     description: str = ""
     remediation: str = ""
-    repo: str
+    # Repository the finding belongs to. Org-scoped findings (the ORG rules)
+    # carry the scope marker below instead of a repository name.
+    repo: str = ORG_SCOPE
     location: str | None = None
     evidence: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
+
+    @property
+    def is_org_scoped(self) -> bool:
+        return self.repo == ORG_SCOPE
 
 
 def risk_score(findings: list[Finding]) -> int:
@@ -187,10 +206,16 @@ class AuditReport(BaseModel):
     org: str
     generated_at: datetime = Field(default_factory=utcnow)
     repos: list[RepoRiskReport] = Field(default_factory=list)
+    # Findings about the organization itself, which apply to every repo under it.
+    org_findings: list[Finding] = Field(default_factory=list)
 
     @property
     def findings(self) -> list[Finding]:
-        return [f for r in self.repos for f in r.findings]
+        return self.org_findings + [f for r in self.repos for f in r.findings]
+
+    @property
+    def org_risk_score(self) -> int:
+        return risk_score(self.org_findings)
 
     def severity_totals(self) -> dict[str, int]:
         totals = {s.value: 0 for s in Severity}

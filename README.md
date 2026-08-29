@@ -63,6 +63,18 @@ Exits `1` when any finding at or above the given severity exists.
 
 ## What it checks
 
+**Organization rules** — settings that apply to *every* repository underneath them,
+including repos created tomorrow. Reported once per audit, above the repo table:
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| ORG001 | high | Two-factor authentication not required for members |
+| ORG002 | medium/high | Base member permission is write (or admin) on every repo |
+| ORG003 | high | Fork pull request workflows run without approval |
+| ORG004 | medium | Default `GITHUB_TOKEN` is read-write org-wide |
+| ORG005 | high | Workflows may create and approve pull requests org-wide |
+| ORG006 | medium | Members can create public repositories |
+
 **Workflow rules** (parsed from workflow YAML):
 
 | ID | Severity | Finding |

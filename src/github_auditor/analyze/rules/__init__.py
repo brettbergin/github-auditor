@@ -8,7 +8,15 @@ from github_auditor.analyze.rules.access_rules import (
     SecretScanningDisabledRule,
     WritableDeployKeyRule,
 )
-from github_auditor.analyze.rules.base import RepoContext, Rule
+from github_auditor.analyze.rules.base import OrgContext, OrgRule, RepoContext, Rule
+from github_auditor.analyze.rules.org_rules import (
+    BaseMemberPermissionRule,
+    MembersCanCreatePublicReposRule,
+    OrgActionsApprovePrRule,
+    OrgDefaultTokenWriteRule,
+    OrgForkPrApprovalRule,
+    TwoFactorNotRequiredRule,
+)
 from github_auditor.analyze.rules.repo_rules import (
     ActionsUnrestrictedRule,
     ArchivedPublicWorkflowsRule,
@@ -53,4 +61,20 @@ ALL_RULES: list[type[Rule]] = [
     ForkPrApprovalRule,
 ]
 
-__all__ = ["ALL_RULES", "RepoContext", "Rule"]
+ALL_ORG_RULES: list[type[OrgRule]] = [
+    TwoFactorNotRequiredRule,
+    BaseMemberPermissionRule,
+    OrgForkPrApprovalRule,
+    OrgDefaultTokenWriteRule,
+    OrgActionsApprovePrRule,
+    MembersCanCreatePublicReposRule,
+]
+
+__all__ = [
+    "ALL_ORG_RULES",
+    "ALL_RULES",
+    "OrgContext",
+    "OrgRule",
+    "RepoContext",
+    "Rule",
+]

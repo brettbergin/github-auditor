@@ -81,6 +81,18 @@ class OrgFetcher:
             info.default_repository_permission = self.client.optional(
                 lambda: org_target.default_repository_permission
             )
+            info.members_can_create_public_repositories = self.client.optional(
+                lambda: _opt_bool(org_target.raw_data.get("members_can_create_public_repositories"))
+            )
+            wf_perms = self.client.get_org_workflow_permissions(org_target)
+            if wf_perms is not None:
+                info.default_workflow_permissions = _opt_str(
+                    wf_perms.get("default_workflow_permissions")
+                )
+                info.can_approve_pull_request_reviews = _opt_bool(
+                    wf_perms.get("can_approve_pull_request_reviews")
+                )
+            info.fork_pr_approval_policy = self.client.get_org_fork_pr_approval_policy(org_target)
         self.store.upsert_org(info)
         return info
 

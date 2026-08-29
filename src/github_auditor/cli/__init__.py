@@ -11,7 +11,7 @@ import typer
 from rich.console import Console
 
 import github_auditor
-from github_auditor.analyze.engine import RuleEngine, select_rules
+from github_auditor.analyze.engine import RuleEngine, select_org_rules, select_rules
 from github_auditor.cache import CacheStore, create_db_engine, init_db
 from github_auditor.config import Settings
 from github_auditor.exceptions import AuditorError
@@ -181,6 +181,7 @@ def _emit_report(
     detail_repo: str | None = None,
 ) -> None:
     if min_severity is not None:
+        report.org_findings = [f for f in report.org_findings if f.severity >= min_severity]
         for rr in report.repos:
             rr.findings = [f for f in rr.findings if f.severity >= min_severity]
 
@@ -395,7 +396,7 @@ def findings(
 @app.command()
 def rules() -> None:
     """List every rule this auditor can run."""
-    render.render_rules_table(select_rules(), stdout)
+    render.render_rules_table([*select_org_rules(), *select_rules()], stdout)
 
 
 @cache_app.command("info")

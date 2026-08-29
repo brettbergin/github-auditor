@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
-from github_auditor.analyze.rules import ALL_RULES, RepoContext, Rule
+from github_auditor.analyze.rules import (
+    ALL_ORG_RULES,
+    ALL_RULES,
+    OrgContext,
+    OrgRule,
+    RepoContext,
+    Rule,
+)
 from github_auditor.analyze.workflow_parser import ParsedWorkflow, parse_workflow
 from github_auditor.cache.store import CacheStore
 from github_auditor.config import Settings
@@ -17,32 +24,60 @@ from github_auditor.models import (
 )
 
 
+def _matches(rule_id: str, name: str, include: set[str] | None, exclude: set[str]) -> bool:
+    keys = {rule_id.lower(), name.lower()}
+    if include is not None and not (keys & include):
+        return False
+    return not (keys & exclude)
+
+
 def select_rules(
     include: Sequence[str] | None = None,
     exclude: Sequence[str] | None = None,
 ) -> list[Rule]:
-    """Instantiate rules, filtered by rule id or name (case-insensitive)."""
+    """Instantiate repo-scoped rules, filtered by rule id or name (case-insensitive)."""
     include_set = {r.lower() for r in include} if include else None
     exclude_set = {r.lower() for r in exclude} if exclude else set()
-    selected = []
-    for cls in ALL_RULES:
-        keys = {cls.id.lower(), cls.name.lower()}
-        if include_set is not None and not (keys & include_set):
-            continue
-        if keys & exclude_set:
-            continue
-        selected.append(cls())
-    return selected
+    return [cls() for cls in ALL_RULES if _matches(cls.id, cls.name, include_set, exclude_set)]
+
+
+def select_org_rules(
+    include: Sequence[str] | None = None,
+    exclude: Sequence[str] | None = None,
+) -> list[OrgRule]:
+    """Instantiate org-scoped rules, filtered by rule id or name (case-insensitive)."""
+    include_set = {r.lower() for r in include} if include else None
+    exclude_set = {r.lower() for r in exclude} if exclude else set()
+    return [cls() for cls in ALL_ORG_RULES if _matches(cls.id, cls.name, include_set, exclude_set)]
 
 
 class RuleEngine:
-    def __init__(self, rules: Sequence[Rule] | None = None, settings: Settings | None = None):
+    def __init__(
+        self,
+        rules: Sequence[Rule] | None = None,
+        settings: Settings | None = None,
+        org_rules: Sequence[OrgRule] | None = None,
+    ):
         self.settings = settings or Settings()
         self.rules: list[Rule] = list(rules) if rules is not None else select_rules()
+        self.org_rules: list[OrgRule] = (
+            list(org_rules) if org_rules is not None else select_org_rules()
+        )
 
     def analyze_repo(self, ctx: RepoContext) -> list[Finding]:
         findings: list[Finding] = []
         for rule in self.rules:
+            findings.extend(rule.check(ctx))
+        return findings
+
+    def analyze_org_settings(self, store: CacheStore, org: str) -> list[Finding]:
+        """Run org-scoped rules. Returns nothing when the org was never fetched."""
+        org_info = store.get_org(org)
+        if org_info is None:
+            return []
+        ctx = OrgContext(org=org, org_info=org_info, settings=self.settings)
+        findings: list[Finding] = []
+        for rule in self.org_rules:
             findings.extend(rule.check(ctx))
         return findings
 
@@ -104,10 +139,14 @@ class RuleEngine:
         persist: bool = True,
         progress: Callable[[str], None] | None = None,
     ) -> AuditReport:
-        """Analyze every cached repo of *org*. Cache-only: never touches the network."""
+        """Analyze the org and every cached repo. Cache-only: never touches the network."""
         repos = store.list_repos(org, include_archived=include_archived)
         report = AuditReport(org=org)
         run_id = store.start_audit_run(org) if persist else None
+
+        report.org_findings = self.analyze_org_settings(store, org)
+        if run_id is not None and report.org_findings:
+            store.save_findings(run_id, report.org_findings)
 
         for repo in repos:
             if progress is not None:
