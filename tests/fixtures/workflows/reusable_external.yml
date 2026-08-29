@@ -12,3 +12,5 @@ jobs:
     secrets: inherit
   internal:
     uses: testorg/workflows/.github/workflows/lint.yml@0123456789abcdef0123456789abcdef01234567
+  external-pinned:
+    uses: audit-tools/workflows/.github/workflows/scan.yml@fedcba9876543210fedcba9876543210fedcba98

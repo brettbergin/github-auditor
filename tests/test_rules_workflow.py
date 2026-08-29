@@ -46,9 +46,11 @@ def test_unpinned_action_high_under_dangerous_trigger():
 
 def test_external_reusable_workflow():
     findings = run_rule(ExternalReusableWorkflowRule(), make_ctx(["reusable_external.yml"]))
-    assert len(findings) == 1  # the org-internal SHA-pinned one is fine
-    assert findings[0].severity == Severity.HIGH
-    assert "some-other-org" in findings[0].evidence
+    # org-internal SHA-pinned: clean; external mutable: high; external pinned: low.
+    assert len(findings) == 2
+    by_evidence = {f.evidence: f.severity for f in findings}
+    assert any("some-other-org" in e and s == Severity.HIGH for e, s in by_evidence.items())
+    assert any("audit-tools" in e and s == Severity.LOW for e, s in by_evidence.items())
 
 
 def test_workflow_run_artifact():

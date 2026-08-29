@@ -118,12 +118,14 @@ class ExternalReusableWorkflowRule(Rule):
     name = "external-reusable-workflow"
     default_severity = Severity.HIGH
     description = (
-        "A job calls a reusable workflow from another owner, or by a mutable ref. The called "
-        "workflow runs with this repository's secrets and token; a compromise or repointed "
-        "tag in that external repo compromises every caller."
+        "A job calls a reusable workflow by a mutable ref, or from another owner. The called "
+        "workflow runs with this repository's secrets and token; a repointed tag or branch in "
+        "that external repo compromises every caller. An external call pinned to a full "
+        "commit SHA is immutable and only informational."
     )
     remediation = (
-        "Only call reusable workflows you control, and pin external ones to a full commit SHA."
+        "Prefer reusable workflows you control; pin any external one to a full commit SHA "
+        "and review the pinned code once."
     )
 
     def check(self, ctx: RepoContext) -> Iterator[Finding]:
@@ -135,19 +137,26 @@ class ExternalReusableWorkflowRule(Rule):
                 owner = uses.split("/")[0].lower()
                 external = owner != ctx.org.lower()
                 pinned = is_sha_pinned(uses)
-                if external or not pinned:
-                    detail = []
-                    if external:
-                        detail.append(f"external owner '{owner}'")
-                    if not pinned:
-                        detail.append("not SHA-pinned")
-                    yield self.finding(
-                        ctx,
-                        title=f"Reusable workflow risk: {uses}",
-                        severity=Severity.HIGH if external else Severity.MEDIUM,
-                        location=_loc(wf, job),
-                        evidence=f"uses: {uses} ({', '.join(detail)})",
-                    )
+                if external and not pinned:
+                    severity = Severity.HIGH
+                    detail = f"external owner '{owner}', not SHA-pinned"
+                elif not pinned:
+                    severity = Severity.MEDIUM
+                    detail = "not SHA-pinned"
+                elif external:
+                    # Immutable pin: the risk window is the one-time review of
+                    # the pinned code, not an ongoing mutable dependency.
+                    severity = Severity.LOW
+                    detail = f"external owner '{owner}', SHA-pinned"
+                else:
+                    continue
+                yield self.finding(
+                    ctx,
+                    title=f"Reusable workflow risk: {uses}",
+                    severity=severity,
+                    location=_loc(wf, job),
+                    evidence=f"uses: {uses} ({detail})",
+                )
 
 
 class WorkflowRunTriggerRule(Rule):
