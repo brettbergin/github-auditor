@@ -1,5 +1,7 @@
 # github-auditor
 
+[![CI](https://github.com/brettbergin/github-auditor/actions/workflows/ci.yml/badge.svg)](https://github.com/brettbergin/github-auditor/actions/workflows/ci.yml)
+
 **Find the repositories that are leaving your GitHub organization at risk.**
 
 Public repos created years ago — still wired to Actions runners, still running unpinned
