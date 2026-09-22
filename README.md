@@ -10,6 +10,11 @@ third-party actions, still granting write tokens to workflows nobody has looked 
 `github-auditor` sweeps an **entire organization** (or user account), caches everything
 locally, and tells you exactly which repos put you at risk and why.
 
+## Quick links
+
+- [CI workflow](https://github.com/brettbergin/github-auditor/actions/workflows/ci.yml) — build and test status.
+- [Issue tracker](https://github.com/brettbergin/github-auditor/issues) — report a bug or request a rule.
+
 - **Fetch** org, repo, workflow, runner, and access data via the GitHub API (PyGithub),
   concurrently and rate-limit aware.
 - **Cache** everything in a local SQLite database (SQLAlchemy) with a freshness TTL, so
