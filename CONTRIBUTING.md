@@ -207,3 +207,7 @@ open a pull request against `main`, and keep it to one logical change.
   pattern, and why the severity you chose is the right one. A rule's value is
   its precision, so say what you did to avoid false positives.
 - All five CI jobs (ruff format, ruff lint, mypy, bandit, pytest) must be green.
+
+Maintainers: [`RELEASING.md`](RELEASING.md) documents how a version is cut and
+published — where the version lives, the tag format, and what happens on a tag
+push.
