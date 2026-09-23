@@ -14,6 +14,7 @@ locally, and tells you exactly which repos put you at risk and why.
 
 - [CI workflow](https://github.com/brettbergin/github-auditor/actions/workflows/ci.yml) — build and test status.
 - [Issue tracker](https://github.com/brettbergin/github-auditor/issues) — report a bug or request a rule.
+- [CLI reference](docs/CLI.md) — every command flag-by-flag, with defaults, accepted values, sample output per format, and the exit code contract.
 - [Changelog](CHANGELOG.md) — what changed between versions, including new rule ids.
 
 - **Fetch** org, repo, workflow, runner, and access data via the GitHub API (PyGithub),
@@ -58,6 +59,9 @@ gha rules                         # list all rules with descriptions
 gha cache info                    # what's cached, how fresh
 gha cache clear --org your-org    # forget one org (DB + clones)
 ```
+
+That is one example per command; see the [CLI reference](docs/CLI.md) for every flag, its
+default, the accepted `--format`/`--sort`/`--severity` values, and the exit code contract.
 
 ### CI usage
 
