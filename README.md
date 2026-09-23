@@ -14,6 +14,7 @@ locally, and tells you exactly which repos put you at risk and why.
 
 - [CI workflow](https://github.com/brettbergin/github-auditor/actions/workflows/ci.yml) — build and test status.
 - [Issue tracker](https://github.com/brettbergin/github-auditor/issues) — report a bug or request a rule.
+- [Changelog](CHANGELOG.md) — what changed between versions, including new rule ids.
 
 - **Fetch** org, repo, workflow, runner, and access data via the GitHub API (PyGithub),
   concurrently and rate-limit aware.
