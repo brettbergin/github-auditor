@@ -155,6 +155,11 @@ ruff check .
 The rule engine runs entirely from the cache, so tests exercise rules against fixture
 workflow files and mocked API objects — no network needed.
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full dev setup, every check CI enforces
+(`ruff format --check`, `ruff check`, `mypy`, `bandit`, `pytest`), and the guide to
+writing a new rule — the contract, where to register it, how to add a fixture-driven
+test, and keeping the rule tables above in sync.
+
 ## License
 
 MIT
