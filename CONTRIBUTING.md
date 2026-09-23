@@ -191,6 +191,13 @@ that table is the user-facing rule catalogue, and a mismatch between it and
 `ALL_RULES` is treated as a bug. Use `medium/high` style when a rule grades its
 severity per finding.
 
+The same change must also add or update the rule's entry in
+[`docs/RULES.md`](docs/RULES.md), the rule reference the README table links to: one
+section per rule id, anchored as `#<lowercase id>`, with the four subsections every
+other entry uses (vulnerable pattern, why it's exploitable, fix, further reading). A
+README row pointing at `docs/RULES.md` with no matching entry, or an entry whose id or
+severity disagrees with the code, is the same kind of bug as a stale table row.
+
 If a rule introduces a new tunable, add it to the **Configuration** table in
 `README.md` alongside the `Settings` field in `src/github_auditor/config.py`.
 

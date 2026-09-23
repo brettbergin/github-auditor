@@ -15,6 +15,7 @@ locally, and tells you exactly which repos put you at risk and why.
 - [CI workflow](https://github.com/brettbergin/github-auditor/actions/workflows/ci.yml) — build and test status.
 - [Issue tracker](https://github.com/brettbergin/github-auditor/issues) — report a bug or request a rule.
 - [CLI reference](docs/CLI.md) — every command flag-by-flag, with defaults, accepted values, sample output per format, and the exit code contract.
+- [Rule reference](docs/RULES.md) — every rule's vulnerable pattern, exploit scenario, and fix, one entry per rule id.
 - [Changelog](CHANGELOG.md) — what changed between versions, including new rule ids.
 
 - **Fetch** org, repo, workflow, runner, and access data via the GitHub API (PyGithub),
@@ -73,53 +74,74 @@ Exits `1` when any finding at or above the given severity exists.
 
 ## What it checks
 
+Each rule id links to its entry in the [rule reference](docs/RULES.md) — the vulnerable
+pattern, the attack it enables, and the concrete fix.
+
+<!-- Anchor map, kept in sync with the rule reference (docs/RULES.md):
+     ORG001(docs/RULES.md#org001) ORG002(docs/RULES.md#org002) ORG003(docs/RULES.md#org003)
+     ORG004(docs/RULES.md#org004) ORG005(docs/RULES.md#org005) ORG006(docs/RULES.md#org006) -->
+
 **Organization rules** — settings that apply to *every* repository underneath them,
 including repos created tomorrow. Reported once per audit, above the repo table:
 
 | ID | Severity | Finding |
 |----|----------|---------|
-| ORG001 | high | Two-factor authentication not required for members |
-| ORG002 | medium/high | Base member permission is write (or admin) on every repo |
-| ORG003 | high | Fork pull request workflows run without approval |
-| ORG004 | medium | Default `GITHUB_TOKEN` is read-write org-wide |
-| ORG005 | high | Workflows may create and approve pull requests org-wide |
-| ORG006 | medium | Members can create public repositories |
+| [ORG001](docs/RULES.md#org001) | high | Two-factor authentication not required for members |
+| [ORG002](docs/RULES.md#org002) | medium/high | Base member permission is write (or admin) on every repo |
+| [ORG003](docs/RULES.md#org003) | high | Fork pull request workflows run without approval |
+| [ORG004](docs/RULES.md#org004) | medium | Default `GITHUB_TOKEN` is read-write org-wide |
+| [ORG005](docs/RULES.md#org005) | high | Workflows may create and approve pull requests org-wide |
+| [ORG006](docs/RULES.md#org006) | medium | Members can create public repositories |
+
+<!-- Anchor map, kept in sync with the rule reference (docs/RULES.md):
+     GHA001(docs/RULES.md#gha001) GHA002(docs/RULES.md#gha002) GHA003(docs/RULES.md#gha003)
+     GHA004(docs/RULES.md#gha004) GHA005(docs/RULES.md#gha005) GHA006(docs/RULES.md#gha006)
+     GHA007(docs/RULES.md#gha007) GHA008(docs/RULES.md#gha008) -->
 
 **Workflow rules** (parsed from workflow YAML):
 
 | ID | Severity | Finding |
 |----|----------|---------|
-| GHA001 | critical | `pull_request_target` workflow checks out the untrusted PR head ("pwn request") |
-| GHA002 | medium/high | Third-party actions pinned to mutable tags instead of commit SHAs |
-| GHA003 | high | Reusable workflows called from external owners or unpinned refs |
-| GHA004 | high | `workflow_run` workflows consuming untrusted artifacts |
-| GHA005 | critical | Untrusted input (PR titles, branch names, comments…) interpolated into scripts |
-| GHA006 | medium/high | `write-all` / write-level `GITHUB_TOKEN` permissions |
-| GHA007 | low | No `permissions:` block at all |
-| GHA008 | medium | Reusable (`workflow_call`) workflows with write or missing permissions |
+| [GHA001](docs/RULES.md#gha001) | critical | `pull_request_target` workflow checks out the untrusted PR head ("pwn request") |
+| [GHA002](docs/RULES.md#gha002) | medium/high | Third-party actions pinned to mutable tags instead of commit SHAs |
+| [GHA003](docs/RULES.md#gha003) | high | Reusable workflows called from external owners or unpinned refs |
+| [GHA004](docs/RULES.md#gha004) | high | `workflow_run` workflows consuming untrusted artifacts |
+| [GHA005](docs/RULES.md#gha005) | critical | Untrusted input (PR titles, branch names, comments…) interpolated into scripts |
+| [GHA006](docs/RULES.md#gha006) | medium/high | `write-all` / write-level `GITHUB_TOKEN` permissions |
+| [GHA007](docs/RULES.md#gha007) | low | No `permissions:` block at all |
+| [GHA008](docs/RULES.md#gha008) | medium | Reusable (`workflow_call`) workflows with write or missing permissions |
+
+<!-- Anchor map, kept in sync with the rule reference (docs/RULES.md):
+     REPO001(docs/RULES.md#repo001) REPO002(docs/RULES.md#repo002) REPO003(docs/RULES.md#repo003)
+     REPO004(docs/RULES.md#repo004) REPO005(docs/RULES.md#repo005) REPO006(docs/RULES.md#repo006)
+     REPO007(docs/RULES.md#repo007) -->
 
 **Repository rules**:
 
 | ID | Severity | Finding |
 |----|----------|---------|
-| REPO001 | critical | Self-hosted runners reachable from a public repo |
-| REPO002 | high | No branch protection on the default branch |
-| REPO003 | medium | Weak branch protection (no reviews, force pushes allowed) |
-| REPO004 | medium/high | Stale repo (no pushes in years) with Actions still enabled |
-| REPO005 | low | Archived public repo still exposing workflow files |
-| REPO006 | medium | Default `GITHUB_TOKEN` is read-write |
-| REPO007 | low | All marketplace actions allowed on a public repo |
+| [REPO001](docs/RULES.md#repo001) | critical | Self-hosted runners reachable from a public repo |
+| [REPO002](docs/RULES.md#repo002) | high | No branch protection on the default branch |
+| [REPO003](docs/RULES.md#repo003) | medium | Weak branch protection (no reviews, force pushes allowed) |
+| [REPO004](docs/RULES.md#repo004) | medium/high | Stale repo (no pushes in years) with Actions still enabled |
+| [REPO005](docs/RULES.md#repo005) | low | Archived public repo still exposing workflow files |
+| [REPO006](docs/RULES.md#repo006) | medium | Default `GITHUB_TOKEN` is read-write |
+| [REPO007](docs/RULES.md#repo007) | low | All marketplace actions allowed on a public repo |
+
+<!-- Anchor map, kept in sync with the rule reference (docs/RULES.md):
+     ACC001(docs/RULES.md#acc001) ACC002(docs/RULES.md#acc002) ACC003(docs/RULES.md#acc003)
+     ACC004(docs/RULES.md#acc004) ACC005(docs/RULES.md#acc005) ACC006(docs/RULES.md#acc006) -->
 
 **Access rules**:
 
 | ID | Severity | Finding |
 |----|----------|---------|
-| ACC001 | high | Deploy keys with write access |
-| ACC002 | medium/high | Outside collaborators with write/admin |
-| ACC003 | medium | Secret scanning disabled on a public repo |
-| ACC004 | low | Push protection disabled |
-| ACC005 | low | Dependabot alerts disabled |
-| ACC006 | high | Workflows allowed to create/approve pull requests |
+| [ACC001](docs/RULES.md#acc001) | high | Deploy keys with write access |
+| [ACC002](docs/RULES.md#acc002) | medium/high | Outside collaborators with write/admin |
+| [ACC003](docs/RULES.md#acc003) | medium | Secret scanning disabled on a public repo |
+| [ACC004](docs/RULES.md#acc004) | low | Push protection disabled |
+| [ACC005](docs/RULES.md#acc005) | low | Dependabot alerts disabled |
+| [ACC006](docs/RULES.md#acc006) | high | Workflows allowed to create/approve pull requests |
 
 ## Token scopes & graceful degradation
 
