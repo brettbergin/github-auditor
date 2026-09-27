@@ -16,6 +16,7 @@ locally, and tells you exactly which repos put you at risk and why.
 - [Issue tracker](https://github.com/brettbergin/github-auditor/issues) — report a bug or request a rule.
 - [CLI reference](docs/CLI.md) — every command flag-by-flag, with defaults, accepted values, sample output per format, and the exit code contract.
 - [Rule reference](docs/RULES.md) — every rule's vulnerable pattern, exploit scenario, and fix, one entry per rule id.
+- [Deployment guide](docs/DEPLOYMENT.md) — running scheduled, recurring audits in GitHub Actions: workflow YAML, least-privilege token setup, and publishing the report.
 - [Changelog](CHANGELOG.md) — what changed between versions, including new rule ids.
 
 - **Fetch** org, repo, workflow, runner, and access data via the GitHub API (PyGithub),
@@ -71,6 +72,11 @@ gha audit your-org --fail-on high --format json --output audit.json
 ```
 
 Exits `1` when any finding at or above the given severity exists.
+
+For the recurring case — a complete scheduled GitHub Actions workflow, which token type
+and scopes to give it, where to keep the cache between runs, and how to publish the report
+as an artifact or job summary instead of (or alongside) failing the build — see the
+[deployment guide](docs/DEPLOYMENT.md).
 
 ## What it checks
 
