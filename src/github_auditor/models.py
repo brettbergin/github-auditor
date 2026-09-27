@@ -174,6 +174,20 @@ def risk_score(findings: list[Finding]) -> int:
     return min(100, sum(f.severity.weight for f in findings))
 
 
+def total_risk_score(findings: list[Finding]) -> int:
+    """Org-wide score: the sum of every subject's own capped score.
+
+    Findings are grouped by :attr:`Finding.repo` (a repository full name, or the
+    ``ORG_SCOPE`` sentinel for org-scoped findings) and :func:`risk_score` is
+    applied per group, so one badly misconfigured repository cannot hide the
+    rest behind the per-subject cap of 100.
+    """
+    by_subject: dict[str, list[Finding]] = {}
+    for finding in findings:
+        by_subject.setdefault(finding.repo, []).append(finding)
+    return sum(risk_score(group) for group in by_subject.values())
+
+
 def risk_grade(score: int) -> str:
     if score == 0:
         return "A"

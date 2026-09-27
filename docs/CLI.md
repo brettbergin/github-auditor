@@ -256,6 +256,95 @@ by severity (highest first), then repository, then rule id. `--format json` here
 flat array of finding objects rather than the full report envelope that
 `audit --format json` produces.
 
+## diff
+
+Compare the org's most recent completed audit run against an earlier one: which findings
+appeared, which went away, and how each repository's risk score moved. Like `findings`
+and `trends` it reads only what previous runs recorded, so it needs no token and makes no
+API calls.
+
+```bash
+gha diff your-org
+```
+
+With no `--since` the baseline is the run immediately before the latest one. If the org
+has fewer than two completed runs, that is an error rather than an empty diff:
+
+- no completed run at all →
+  `No completed audit runs cached for '<org>'. Run 'gha audit <org>' first.`
+- exactly one →
+  `Need at least two completed audit runs to diff '<org>'. Run 'gha audit <org>' again to build history.`
+
+Both exit with code 2.
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--since` | the previous run | Baseline to diff against: a run id (as printed by `trends`) or an ISO date/datetime. A naive value is read as UTC. |
+| `--format`, `-f` | `table` | Output format: `table` or `json`. |
+| `--db` | `~/.github-auditor/cache.db` | Cache database path override. |
+
+A `--since` that is an integer is looked up as a run id, and a run id this org has no
+completed run for exits 2 with `Run <id> not found for '<org>'.` Anything else is parsed
+as a date, and the baseline becomes the org's most recent run that started at or before
+it — with nothing that old, `No completed audit run at or before '<value>' for '<org>'.`
+and exit code 2. A value that is neither exits 2 with
+`Could not parse --since value '<value>' as a run id or date.`
+
+Examples:
+
+```bash
+gha diff your-org                                    # latest run vs the one before it
+gha diff your-org --since 12                         # latest run vs run 12
+gha diff your-org --since 2024-05-01                 # vs the last run on or before May 1
+gha diff your-org --format json | jq '.new_findings[].title'
+```
+
+Two findings count as the same across runs when their rule id, repository and location
+match, so a finding that moves to another file reads as one resolved plus one new rather
+than as unchanged. When nothing changed at all the command prints
+`No changes between run <baseline> and run <current>.` and exits 0.
+
+`--format json` emits
+`{"org", "baseline_run", "current_run", "new_findings", "resolved_findings", "scope_deltas", "baseline_total", "current_total", "total_delta"}`,
+where each run is `{"id", "started_at", "finished_at"}`, the finding arrays hold full
+finding objects, and each scope delta is
+`{"scope", "baseline_score", "current_score", "delta"}` — `scope` being a repository full
+name or `<organization>` for org-scoped findings.
+
+## trends
+
+Show how the org's risk score moved across its cached audit runs — one row per completed
+run, oldest first, with the score move from the run above it in the `Δ` column. It reads
+only what earlier runs recorded, so it needs no token and makes no API calls.
+
+If the org has no completed audit run at all it prints
+`No completed audit runs cached for '<org>'. Run 'gha audit <org>' first.` and exits with
+code 2.
+
+```bash
+gha trends your-org
+```
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--limit` | `10` | How many of the most recent runs to show. They are still displayed oldest-first among themselves. |
+| `--format`, `-f` | `table` | Output format: `table` or `json`. |
+| `--db` | `~/.github-auditor/cache.db` | Cache database path override. |
+
+Examples:
+
+```bash
+gha trends your-org --limit 5                        # the last five runs
+gha trends your-org --format json | jq '.[].risk_score'
+gha trends your-org --db ./audit-cache.db
+```
+
+`--format json` emits an array of
+`{"id", "started_at", "finished_at", "repo_count", "finding_count", "risk_score", "delta"}`
+objects in the same oldest-first order, with `delta` set to `null` on the first entry.
+The score is the org-wide total: each repository's own score (capped at 100) summed
+across the org, so one badly misconfigured repository cannot hide the rest.
+
 ## `rules`
 
 Print the full rule catalogue — every organization rule followed by every repository
@@ -520,6 +609,8 @@ Severity comparison uses the ranking `critical` > `high` > `medium` > `low` > `i
   to stderr.
 - Nothing usable in the cache for the requested org (for the offline commands), or a
   `--repo` that is not present in the report.
+- For `diff`: fewer than two completed runs to compare, or a `--since` value that is
+  neither a run id of this org nor a date any completed run started at or before.
 
 Typer also uses exit code 2 for its own usage errors, such as an unknown flag.
 

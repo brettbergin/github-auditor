@@ -29,6 +29,7 @@ from github_auditor.models import (
     RunnerInfo,
     Severity,
     WorkflowInfo,
+    total_risk_score,
     utcnow,
 )
 
@@ -38,6 +39,11 @@ def _aware(dt: datetime | None) -> datetime | None:
     if dt is not None and dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def _aware_utc(dt: datetime) -> datetime:
+    """Non-optional variant of :func:`_aware`, for columns that are never null."""
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
 
 
 @dataclass
@@ -52,6 +58,41 @@ class CacheStats:
     oldest_fetch: datetime | None = None
     newest_fetch: datetime | None = None
     orgs: list[str] = field(default_factory=list)
+
+
+@dataclass
+class AuditRunSummary:
+    """One finished analysis run, as history/trend views want to read it."""
+
+    id: int
+    started_at: datetime
+    finished_at: datetime | None
+    repo_count: int
+    finding_count: int
+    risk_score: int
+
+
+@dataclass
+class TrendRow(AuditRunSummary):
+    """A run in a chronological trend view, with the score move from the run before it.
+
+    ``delta`` is None for the first row shown, which has no predecessor to compare
+    against.
+    """
+
+    delta: int | None = None
+
+    @classmethod
+    def from_run(cls, run: AuditRunSummary, delta: int | None) -> TrendRow:
+        return cls(
+            id=run.id,
+            started_at=run.started_at,
+            finished_at=run.finished_at,
+            repo_count=run.repo_count,
+            finding_count=run.finding_count,
+            risk_score=run.risk_score,
+            delta=delta,
+        )
 
 
 class CacheStore:
@@ -269,6 +310,62 @@ class CacheStore:
         if min_severity is not None:
             findings = [f for f in findings if f.severity >= min_severity]
         return sorted(findings, key=lambda f: (-f.severity.rank, f.repo, f.rule_id))
+
+    # -- run history -------------------------------------------------------
+
+    def findings_for_run(self, run_id: int) -> list[Finding]:
+        """Every finding saved under one specific run, most-severe first."""
+        with self._session() as session:
+            stmt = select(FindingRow).where(FindingRow.run_id == run_id)
+            findings = [Finding.model_validate(row.data) for row in session.scalars(stmt)]
+        return sorted(findings, key=lambda f: (-f.severity.rank, f.repo, f.rule_id))
+
+    def _summarize_run(self, row: AuditRunRow) -> AuditRunSummary:
+        return AuditRunSummary(
+            id=row.id,
+            started_at=_aware_utc(row.started_at),
+            finished_at=_aware(row.finished_at),
+            repo_count=row.repo_count,
+            finding_count=row.finding_count,
+            risk_score=total_risk_score(self.findings_for_run(row.id)),
+        )
+
+    def list_audit_runs(self, org: str, *, limit: int = 10) -> list[AuditRunSummary]:
+        """The org's finished runs, most recent first, at most ``limit`` of them."""
+        with self._session() as session:
+            rows = list(
+                session.scalars(
+                    select(AuditRunRow)
+                    .where(AuditRunRow.org_login == org, AuditRunRow.finished_at.is_not(None))
+                    .order_by(AuditRunRow.id.desc())
+                    .limit(limit)
+                )
+            )
+        return [self._summarize_run(row) for row in rows]
+
+    def get_run(self, org: str, run_id: int) -> AuditRunSummary | None:
+        """One finished run of this org by id, or None if there is no such run."""
+        with self._session() as session:
+            row = session.scalar(
+                select(AuditRunRow).where(
+                    AuditRunRow.id == run_id,
+                    AuditRunRow.org_login == org,
+                    AuditRunRow.finished_at.is_not(None),
+                )
+            )
+        return self._summarize_run(row) if row is not None else None
+
+    def find_run_before(self, org: str, cutoff: datetime) -> AuditRunSummary | None:
+        """The org's most recent finished run that started at or before ``cutoff``."""
+        cutoff = _aware_utc(cutoff)
+        with self._session() as session:
+            rows = session.scalars(
+                select(AuditRunRow)
+                .where(AuditRunRow.org_login == org, AuditRunRow.finished_at.is_not(None))
+                .order_by(AuditRunRow.id.desc())
+            )
+            match = next((row for row in rows if _aware_utc(row.started_at) <= cutoff), None)
+        return self._summarize_run(match) if match is not None else None
 
     # -- maintenance -------------------------------------------------------
 

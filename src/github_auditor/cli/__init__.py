@@ -5,14 +5,17 @@ from __future__ import annotations
 import shutil
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
 from rich.console import Console
 
 import github_auditor
+from github_auditor.analyze.diff import compute_diff
 from github_auditor.analyze.engine import RuleEngine, select_org_rules, select_rules
 from github_auditor.cache import CacheStore, create_db_engine, init_db
+from github_auditor.cache.store import AuditRunSummary, TrendRow
 from github_auditor.config import Settings
 from github_auditor.exceptions import AuditorError
 from github_auditor.models import AuditReport, Severity
@@ -391,6 +394,110 @@ def findings(
         print(export.findings_to_csv(results))
     else:
         render.render_findings_table(results, stdout)
+
+
+def _baseline_from_since(store: CacheStore, org: str, since: str) -> AuditRunSummary:
+    """Resolve ``--since``: a run id when it parses as an int, otherwise a date cutoff."""
+    try:
+        run_id = int(since)
+    except ValueError:
+        pass
+    else:
+        by_id = store.get_run(org, run_id)
+        if by_id is None:
+            stderr.print(f"[red]Run {since} not found for '{org}'.[/]")
+            raise typer.Exit(code=2)
+        return by_id
+
+    try:
+        cutoff = datetime.fromisoformat(since)
+    except ValueError as exc:
+        stderr.print(f"[red]Could not parse --since value '{since}' as a run id or date.[/]")
+        raise typer.Exit(code=2) from exc
+    # A bare date or naive datetime is read as UTC: run timestamps are stored in UTC.
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.replace(tzinfo=timezone.utc)
+    by_date = store.find_run_before(org, cutoff)
+    if by_date is None:
+        stderr.print(f"[red]No completed audit run at or before '{since}' for '{org}'.[/]")
+        raise typer.Exit(code=2)
+    return by_date
+
+
+@app.command()
+def diff(
+    org: str = typer.Argument(None, help="Organization (or user) whose runs to compare."),
+    since: str = typer.Option(
+        None, "--since", help="Baseline to diff against: a run id or an ISO date/datetime."
+    ),
+    format: str = typer.Option("table", "--format", "-f", help="table or json."),
+    db: Path = typer.Option(None, "--db"),
+) -> None:
+    """Diff the latest cached audit run against an earlier one."""
+    ctx = _load_context(db)
+    target = _resolve_org(org, ctx.settings)
+
+    # Without --since the previous run is the baseline, so fetch both in one query.
+    runs = ctx.store.list_audit_runs(target, limit=1 if since is not None else 2)
+    if not runs:
+        stderr.print(
+            f"[red]No completed audit runs cached for '{target}'. "
+            f"Run 'gha audit {target}' first.[/]"
+        )
+        raise typer.Exit(code=2)
+    current = runs[0]
+
+    if since is None:
+        if len(runs) < 2:
+            stderr.print(
+                f"[red]Need at least two completed audit runs to diff '{target}'. "
+                f"Run 'gha audit {target}' again to build history.[/]"
+            )
+            raise typer.Exit(code=2)
+        baseline = runs[1]
+    else:
+        baseline = _baseline_from_since(ctx.store, target, since)
+
+    result = compute_diff(
+        ctx.store.findings_for_run(baseline.id), ctx.store.findings_for_run(current.id)
+    )
+    if format == "json":
+        print(export.diff_to_json(target, baseline, current, result))
+    else:
+        render.render_diff(target, baseline, current, result, stdout)
+
+
+@app.command()
+def trends(
+    org: str = typer.Argument(None, help="Organization (or user) whose run history to show."),
+    limit: int = typer.Option(10, "--limit", help="How many of the most recent runs to show."),
+    format: str = typer.Option("table", "--format", "-f", help="table or json."),
+    db: Path = typer.Option(None, "--db"),
+) -> None:
+    """Show the org's risk score across its last N cached audit runs."""
+    ctx = _load_context(db)
+    target = _resolve_org(org, ctx.settings)
+    runs = ctx.store.list_audit_runs(target, limit=limit)
+    if not runs:
+        stderr.print(
+            f"[red]No completed audit runs cached for '{target}'. "
+            f"Run 'gha audit {target}' first.[/]"
+        )
+        raise typer.Exit(code=2)
+
+    # The store hands back the newest run first; a trend reads oldest to newest,
+    # so each row can carry its move from the run before it.
+    rows: list[TrendRow] = []
+    previous: AuditRunSummary | None = None
+    for run in reversed(runs):
+        delta = None if previous is None else run.risk_score - previous.risk_score
+        rows.append(TrendRow.from_run(run, delta))
+        previous = run
+
+    if format == "json":
+        print(export.trends_to_json(rows))
+    else:
+        render.render_trends(target, rows, stdout)
 
 
 @app.command()

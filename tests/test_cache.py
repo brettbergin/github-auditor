@@ -1,7 +1,14 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from conftest import make_repo
-from github_auditor.models import Finding, OrgInfo, RunnerInfo, Severity, WorkflowInfo
+from github_auditor.models import (
+    Finding,
+    OrgInfo,
+    RunnerInfo,
+    Severity,
+    WorkflowInfo,
+    utcnow,
+)
 
 
 def test_repo_roundtrip(store):
@@ -118,6 +125,88 @@ def test_latest_findings_uses_latest_run(store):
     run2 = store.start_audit_run("testorg")
     store.finish_audit_run(run2, repo_count=1, finding_count=0)
     assert store.latest_findings("testorg") == []
+
+
+def test_findings_for_run_is_scoped_to_that_run(store):
+    run1 = store.start_audit_run("testorg")
+    store.save_findings(run1, [_finding(severity=Severity.CRITICAL)])
+    store.finish_audit_run(run1, repo_count=1, finding_count=1)
+    run2 = store.start_audit_run("testorg")
+    store.save_findings(
+        run2,
+        [_finding(rule_id="REPO002", severity=Severity.LOW), _finding(repo="testorg/b")],
+    )
+    store.finish_audit_run(run2, repo_count=2, finding_count=2)
+
+    first = store.findings_for_run(run1)
+    assert [(f.rule_id, f.repo) for f in first] == [("GHA001", "testorg/a")]
+    second = store.findings_for_run(run2)
+    assert [f.rule_id for f in second] == ["GHA001", "REPO002"]  # severity desc, then repo
+    assert store.findings_for_run(run2 + 100) == []
+
+
+def test_list_audit_runs(store):
+    run1 = store.start_audit_run("testorg")
+    store.save_findings(run1, [_finding(severity=Severity.CRITICAL)])
+    store.finish_audit_run(run1, repo_count=1, finding_count=1)
+    run2 = store.start_audit_run("testorg")
+    store.save_findings(
+        run2,
+        [_finding(severity=Severity.CRITICAL), _finding(repo="testorg/b", severity=Severity.LOW)],
+    )
+    store.finish_audit_run(run2, repo_count=2, finding_count=2)
+    unfinished = store.start_audit_run("testorg")
+    store.save_findings(unfinished, [_finding()])
+    other = store.start_audit_run("otherorg")
+    store.finish_audit_run(other, repo_count=0, finding_count=0)
+
+    runs = store.list_audit_runs("testorg")
+    assert [r.id for r in runs] == [run2, run1]  # newest first, unfinished excluded
+    assert runs[0].repo_count == 2
+    assert runs[0].finding_count == 2
+    assert runs[0].risk_score == 52  # 50 (testorg/a) + 2 (testorg/b), summed per repo
+    assert runs[1].risk_score == 50
+    assert runs[0].finished_at is not None
+    assert [r.id for r in store.list_audit_runs("testorg", limit=1)] == [run2]
+    assert store.list_audit_runs("nosuchorg") == []
+
+
+def test_get_run(store):
+    run = store.start_audit_run("testorg")
+    store.save_findings(run, [_finding(severity=Severity.CRITICAL)])
+    assert store.get_run("testorg", run) is None  # not finished yet
+    store.finish_audit_run(run, repo_count=1, finding_count=1)
+
+    summary = store.get_run("testorg", run)
+    assert summary is not None
+    assert summary.id == run
+    assert summary.risk_score == 50
+    assert store.get_run("otherorg", run) is None
+    assert store.get_run("testorg", run + 100) is None
+
+
+def test_find_run_before(store):
+    run1 = store.start_audit_run("testorg")
+    store.save_findings(run1, [_finding(severity=Severity.CRITICAL)])
+    store.finish_audit_run(run1, repo_count=1, finding_count=1)
+    cutoff = utcnow()
+    run2 = store.start_audit_run("testorg")
+    store.finish_audit_run(run2, repo_count=1, finding_count=0)
+
+    assert store.find_run_before("testorg", utcnow()).id == run2
+    before = store.find_run_before("testorg", cutoff)
+    assert before is not None
+    assert before.id == run1
+    assert before.risk_score == 50
+    assert store.find_run_before("testorg", datetime(2000, 1, 1, tzinfo=timezone.utc)) is None
+    assert store.find_run_before("otherorg", utcnow()) is None
+
+
+def test_find_run_before_skips_unfinished(store):
+    run1 = store.start_audit_run("testorg")
+    store.finish_audit_run(run1, repo_count=1, finding_count=0)
+    store.start_audit_run("testorg")  # still running
+    assert store.find_run_before("testorg", utcnow()).id == run1
 
 
 def test_clear_org_scoped(store):
