@@ -8,6 +8,7 @@ from github_auditor.models import (
     WorkflowInfo,
     risk_grade,
     risk_score,
+    total_risk_score,
 )
 
 
@@ -38,6 +39,23 @@ def test_risk_scoring():
     assert risk_grade(15) == "C"
     assert risk_grade(35) == "D"
     assert risk_grade(57) == "F"
+
+
+def test_total_risk_score_sums_per_subject():
+    def crit(repo):
+        return Finding(rule_id="X", rule_name="x", severity=Severity.CRITICAL, title="t", repo=repo)
+
+    findings = [
+        crit("org/a"),
+        crit("org/b"),
+        Finding(rule_id="O", rule_name="o", severity=Severity.LOW, title="t"),  # ORG_SCOPE
+    ]
+    # 50 + 50 + 2: each subject is capped at 100, the org-wide total is not.
+    assert total_risk_score(findings) == 102
+    assert total_risk_score([]) == 0
+    # A single subject still saturates at its own cap.
+    assert total_risk_score([crit("org/a")] * 10) == 100
+    assert total_risk_score([crit("org/a")] * 10 + [crit("org/b")]) == 150
 
 
 def test_analyze_repo_runs_all_rules():

@@ -57,6 +57,8 @@ gha audit your-org --deep         # also clone repos to scan workflow files from
 gha report your-org --repo your-org/legacy-service   # full findings for one repo
 gha repos your-org --sort pushed  # every repo with score/grade/last-push
 gha findings your-org --min-severity high --format csv > findings.csv
+gha diff your-org                 # what's new/resolved since the previous audit run
+gha trends your-org --limit 5     # risk score across the last 5 cached audit runs
 gha rules                         # list all rules with descriptions
 gha cache info                    # what's cached, how fresh
 gha cache clear --org your-org    # forget one org (DB + clones)
